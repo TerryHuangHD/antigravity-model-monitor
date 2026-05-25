@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'none'; style-src {{cspSource}}; script-src 'nonce-{{nonce}}'; img-src {{cspSource}} data:;" />
+  <title>Antigravity Model Monitor</title>
+  <link rel="stylesheet" href="{{cssUri}}" />
+</head>
+
+<body>
+
+  <header class="app-header">
+    <div class="header-title">
+      <h1>Antigravity Model Monitor</h1>
+      <p class="subtitle" id="subtitle">Loading…</p>
+    </div>
+    <div class="header-actions">
+      <div class="credits" id="credits" hidden>
+        <span class="credits-icon">◉</span>
+        <span class="credits-label">Credits</span>
+        <span class="credits-value" id="credits-value">—</span>
+      </div>
+      <button id="refresh-btn" type="button">Refresh</button>
+    </div>
+  </header>
+
+  <!-- Plan Details Premium Card -->
+  <div class="plan-card" id="plan-card" hidden>
+    <div class="plan-card-header">
+      <h2>Plan Details</h2>
+      <div class="plan-card-header-actions">
+        <button class="btn-subtle btn-toggle-data" id="toggle-data-btn">Hide Data</button>
+        <span class="plan-badge" id="plan-badge-name">GOOGLE AI PRO</span>
+      </div>
+    </div>
+
+    <div class="plan-grid is-collapsed" id="plan-grid">
+      <!-- Grid items will be rendered dynamically by JS -->
+    </div>
+
+    <div class="plan-upgrade-banner" id="plan-upgrade-banner" hidden>
+      <span id="upgrade-message">You can upgrade to a Google AI Ultra plan to receive the highest rate limits.</span>
+      <a class="upgrade-link" id="upgrade-link" href="#" target="_blank">Upgrade Now</a>
+    </div>
+
+    <div class="plan-card-footer">
+      <button class="btn-expand" id="toggle-expand-btn">
+        Show More <span class="arrow">▼</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Settings Premium Card -->
+  <div class="plan-card settings-card" id="settings-card" hidden>
+    <div class="plan-card-header">
+      <h2>Settings</h2>
+    </div>
+
+    <div class="settings-grid">
+      <div class="grid-item">
+        <span class="grid-label">Show Credits in Status Bar</span>
+        <span class="grid-value" id="setting-show-credits-container"></span>
+      </div>
+      <div class="grid-item">
+        <span class="grid-label">Refresh Interval (seconds)</span>
+        <span class="grid-value">
+          <input type="number" id="setting-refresh-interval" class="settings-input" min="10" max="3600" step="10" />
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <main id="content">
+    <div class="empty" id="empty">Waiting for quota data…</div>
+  </main>
+
+  <footer class="app-footer">
+    <button id="reset-all" type="button" class="link-button">Reset all custom names</button>
+  </footer>
+
+  <script nonce="{{nonce}}" src="{{jsUri}}"></script>
+</body>
+
+</html>

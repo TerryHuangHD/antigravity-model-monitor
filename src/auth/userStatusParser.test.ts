@@ -1,0 +1,44 @@
+import { parseUserStatusProto } from './userStatusParser';
+
+describe('userStatusParser', () => {
+  it('correctly parses the userStatusProtoBinaryBase64 string', () => {
+    const b64 = "EAEaC1RlcnJ5IEh1YW5nOhJrbXNoaW9yaUBnbWFpbC5jb21qbQpmCAISA1BybxgBIAEw////////////ATiAgAFA2ARI////////////AVD///////////8BYNCGA2jwkwlwqMMBeAGQAQGYAQGgAQGwAQG4AQHCAQcoATgByAEByAEB2AEB6AEB+AEBQPQDSGSKAv0VCscBChxDbGF1ZGUgU29ubmV0IDQuNiAoVGhpbmtpbmcpEgMIiwgoAVgBYgYCAQUDBAh6DQ3NzEw+EgYIwr65zgaSAR0KGXZpZGVvL3ZpZGVvZnJhbWUvanBlZzIwMDAQAZIBDgoKaW1hZ2UvaGVpYxABkgEOCgppbWFnZS9oZWlmEAGSAQ4KCmltYWdlL2pwZWcQAZIBDQoJaW1hZ2UvcG5nEAGSAQ4KCmltYWdlL3dlYnAQAZIBEgoOdmlkZW8vanBlZzIwMDAQAQrFAQoaQ2xhdWRlIE9wdXMgNC42IChUaGlua2luZykSAwiCCCgBWAFiBgIBBQMECHoNDc3MTD4SBgjCvrnOBpIBDQoJaW1hZ2UvcG5nEAGSAQ4KCmltYWdlL3dlYnAQAZIBEgoOdmlkZW8vanBlZzIwMDAQAZIBHQoZdmlkZW8vdmlkZW9mcmFtZS9qcGVnMjAwMBABkgEOCgppbWFnZS9oZWljEAGSAQ4KCmltYWdlL2hlaWYQAZIBDgoKaW1hZ2UvanBlZxABCjUKFUdQVC1PU1MgMTIwQiAoTWVkaXVtKRIDCNYCWAFiBgIBBQMECHoNDc3MTD4SBgjCvrnOBgrbBQoVR2VtaW5pIDMuMSBQcm8gKEhpZ2gpEgMIjQgoAVgBYgYCAQUDBAh6DQ3NzEw+EgYIo/mdzgaCAQNOZXeSARUKEXRleHQveC10eXBlc2NyaXB0EAGSAQwKCHRleHQvY3N2EAGSAR0KGWFwcGxpY2F0aW9uL3gtcHl0aG9uLWNvZGUQAZIBEwoPdGV4dC9qYXZhc2NyaXB0EAGSARIKDnZpZGVvL2pwZWcyMDAwEAGSARMKD2FwcGxpY2F0aW9uL3BkZhABkgERCg10ZXh0L21hcmtkb3duEAGSARMKD3ZpZGVvL2F1ZGlvL3dhdhABkgEOCgppbWFnZS9qcGVnEAGSAQ4KCnZpZGVvL3dlYm0QAZIBGAoUdGV4dC94LXB5dGhvbi1zY3JpcHQQAZIBHAoYYXBwbGljYXRpb24veC10eXBlc2NyaXB0EAGSAQ4KCmltYWdlL2hlaWYQAZIBDgoKaW1hZ2UvaGVpYxABkgEOCgppbWFnZS93ZWJwEAGSAQwKCHRleHQveG1sEAGSAREKDXRleHQveC1weXRob24QAZIBDAoIdGV4dC9jc3MQAZIBEwoPYXBwbGljYXRpb24vcnRmEAGSAQ0KCWltYWdlL3BuZxABkgEcChhhcHBsaWNhdGlvbi94LWphdmFzY3JpcHQQAZIBFAoQYXBwbGljYXRpb24vanNvbhABkgENCgl0ZXh0L2h0bWwQAZIBDAoIdGV4dC9ydGYQAZIBHAoYYXBwbGljYXRpb24veC1pcHluYitqc29uEAGSARoKFmF1ZGlvL3dlYm07Y29kZWNzPW9wdXMQAZIBDQoJdmlkZW8vbXA0EAGSAQ4KCnRleHQvcGxhaW4QAZIBFQoRdmlkZW8vYXVkaW8vczE2bGUQAZIBHQoZdmlkZW8vdmlkZW9mcmFtZS9qcGVnMjAwMBABkgEYChR2aWRlby90ZXh0L3RpbWVzdGFtcBABCtoFChRHZW1pbmkgMy4xIFBybyAoTG93KRIDCIwIKAFYAWIGAgEFAwQIeg0NzcxMPhIGCKP5nc4GggEDTmV3kgEOCgppbWFnZS9qcGVnEAGSARgKFHRleHQveC1weXRob24tc2NyaXB0EAGSAQ0KCXRleHQvaHRtbBABkgEdChlhcHBsaWNhdGlvbi94LXB5dGhvbi1jb2RlEAGSAQwKCHRleHQvY3NzEAGSAQwKCHRleHQvY3N2EAGSAQ4KCmltYWdlL3dlYnAQAZIBGAoUdmlkZW8vdGV4dC90aW1lc3RhbXAQAZIBEwoPdmlkZW8vYXVkaW8vd2F2EAGSARUKEXZpZGVvL2F1ZGlvL3MxNmxlEAGSARMKD2FwcGxpY2F0aW9uL3J0ZhABkgENCglpbWFnZS9wbmcQAZIBDQoJdmlkZW8vbXA0EAGSAQ4KCnRleHQvcGxhaW4QAZIBEgoOdmlkZW8vanBlZzIwMDAQAZIBFAoQYXBwbGljYXRpb24vanNvbhABkgETCg9hcHBsaWNhdGlvbi9wZGYQAZIBDgoKaW1hZ2UvaGVpZhABkgEdChl2aWRlby92aWRlb2ZyYW1lL2pwZWcyMDAwEAGSAQ4KCnZpZGVvL3dlYm0QAZIBHAoYYXBwbGljYXRpb24veC1qYXZhc2NyaXB0EAGSARwKGGFwcGxpY2F0aW9uL3gtaXB5bmIranNvbhABkgEOCgppbWFnZS9oZWljEAGSAQwKCHRleHQvcnRmEAGSAREKDXRleHQvbWFya2Rvd24QAZIBGgoWYXVkaW8vd2VibTtjb2RlY3M9b3B1cxABkgETCg90ZXh0L2phdmFzY3JpcHQQAZIBFQoRdGV4dC94LXR5cGVzY3JpcHQQAZIBHAoYYXBwbGljYXRpb24veC10eXBlc2NyaXB0EAGSAQwKCHRleHQveG1sEAGSAREKDXRleHQveC1weXRob24QAQrOBQoOR2VtaW5pIDMgRmxhc2gSAwiXCCgBWAFiBgIBBQMECHoNDQAAgD8SBgi8opzOBpIBHQoZYXBwbGljYXRpb24veC1weXRob24tY29kZRABkgENCglpbWFnZS9wbmcQAZIBHAoYYXBwbGljYXRpb24veC1pcHluYitqc29uEAGSARwKGGFwcGxpY2F0aW9uL3gtamF2YXNjcmlwdBABkgEUChBhcHBsaWNhdGlvbi9qc29uEAGSARMKD2FwcGxpY2F0aW9uL3J0ZhABkgERCg10ZXh0L21hcmtkb3duEAGSARoKFmF1ZGlvL3dlYm07Y29kZWNzPW9wdXMQAZIBDAoIdGV4dC94bWwQAZIBHAoYYXBwbGljYXRpb24veC10eXBlc2NyaXB0EAGSAQ4KCmltYWdlL2hlaWMQAZIBDAoIdGV4dC9jc3MQAZIBFQoRdmlkZW8vYXVkaW8vczE2bGUQAZIBDAoIdGV4dC9jc3YQAZIBDQoJdGV4dC9odG1sEAGSARIKDnZpZGVvL2pwZWcyMDAwEAGSAR0KGXZpZGVvL3ZpZGVvZnJhbWUvanBlZzIwMDAQAZIBDAoIdGV4dC9ydGYQAZIBGAoUdGV4dC94LXB5dGhvbi1zY3JpcHQQAZIBEwoPdGV4dC9qYXZhc2NyaXB0EAGSAQ4KCnRleHQvcGxhaW4QAZIBEwoPdmlkZW8vYXVkaW8vd2F2EAGSAQ4KCmltYWdlL2hlaWYQAZIBDgoKaW1hZ2UvanBlZxABkgENCgl2aWRlby9tcDQQAZIBFQoRdGV4dC94LXR5cGVzY3JpcHQQAZIBDgoKaW1hZ2Uvd2VicBABkgEYChR2aWRlby90ZXh0L3RpbWVzdGFtcBABkgERCg10ZXh0L3gtcHl0aG9uEAGSARMKD2FwcGxpY2F0aW9uL3BkZhABkgEOCgp2aWRlby93ZWJtEAESngEKC1JlY29tbWVuZGVkEo4BEhVHZW1pbmkgMy4xIFBybyAoSGlnaCkSFEdlbWluaSAzLjEgUHJvIChMb3cpEg5HZW1pbmkgMyBGbGFzaBIcQ2xhdWRlIFNvbm5ldCA0LjYgKFRoaW5raW5nKRIaQ2xhdWRlIE9wdXMgNC42IChUaGlua2luZykSFUdQVC1PU1MgMTIwQiAoTWVkaXVtKRoFCgMIjQiQAgGiAqwBCgtnMS1wcm8tdGllchINR29vZ2xlIEFJIFBybxoNR29vZ2xlIEFJIFBybzolaHR0cHM6Ly9hbnRpZ3Jhdml0eS5nb29nbGUvZzEtdXBncmFkZUJPWW91IGNhbiB1cGdyYWRlIHRvIHRoZSBHb29nbGUgQUkgVWx0cmEgcGxhbiB0byByZWNlaXZlIHRoZSBoaWdoZXN0IHJhdGUgbGltaXRzLnIHCAEQ6AcYMg==";
+    const details = parseUserStatusProto(b64);
+
+    expect(details.name).toBe('Terry Huang');
+    expect(details.email).toBe('kmshiori@gmail.com');
+    expect(details.tierId).toBe('g1-pro-tier');
+    expect(details.description).toBe('Google AI Pro');
+    expect(details.planName).toBe('GOOGLE AI PRO');
+    expect(details.upgradeUrl).toBe('https://antigravity.google/g1-upgrade');
+    expect(details.upgradeMessage).toBe('You can upgrade to the Google AI Ultra plan to receive the highest rate limits.');
+    expect(details.credits).toBe(1000);
+
+    expect(details.features.webSearch).toBe(true);
+    expect(details.features.browserAccess).toBe(true);
+    expect(details.features.contextWindow).toBe(16384);
+    expect(details.features.chatInstructionsCharLimit).toBe(600);
+    expect(details.features.maxPremiumMsgs).toBe(-1);
+    expect(details.features.pinnedContextItems).toBe(-1);
+    expect(details.features.localIndexSize).toBe(-1);
+    expect(details.features.teamsTier).toBe('TEAMS_TIER_PRO');
+    expect(details.features.internalTierId).toBe('g1-pro-tier');
+    expect(details.features.mcpServers).toBe(true);
+    expect(details.features.gitCommitGen).toBe(true);
+    expect(details.features.knowledgeBase).toBe(true);
+    expect(details.features.cascadeAutoRun).toBe(true);
+    expect(details.features.cascadeBackground).toBe(true);
+  });
+
+  it('gracefully handles empty and invalid base64 input', () => {
+    const details = parseUserStatusProto('');
+    expect(details.tierId).toBe('g1-pro-tier');
+    expect(details.description).toBe('Google AI Pro');
+    expect(details.features.contextWindow).toBe(16384);
+
+    const invalidDetails = parseUserStatusProto('invalid-base-64!!!');
+    expect(invalidDetails.tierId).toBe('g1-pro-tier');
+    expect(invalidDetails.description).toBe('Google AI Pro');
+    expect(invalidDetails.features.contextWindow).toBe(16384);
+  });
+});
