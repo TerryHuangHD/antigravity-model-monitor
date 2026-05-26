@@ -2,7 +2,7 @@
   "name": "antigravity-model-monitor",
   "displayName": "Antigravity Model Monitor",
   "description": "Status-bar monitor for Antigravity AI model quotas. Click to manage model and group display names.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "terryhuanghd",
   "engines": {
     "vscode": "^1.90.0"
@@ -29,33 +29,33 @@
     "commands": [
       {
         "command": "agModelMonitor.openPanel",
-        "title": "Open Antigravity Monitor",
-        "category": "Antigravity Monitor"
+        "title": "Open Antigravity Model Monitor",
+        "category": "Antigravity Model Monitor"
       },
       {
         "command": "agModelMonitor.refresh",
         "title": "Refresh Antigravity Quota",
-        "category": "Antigravity Monitor"
+        "category": "Antigravity Model Monitor"
       },
       {
         "command": "agModelMonitor.showLogs",
         "title": "Show Logs",
-        "category": "Antigravity Monitor"
+        "category": "Antigravity Model Monitor"
       },
       {
         "command": "agModelMonitor.resetCustomNames",
         "title": "Reset All Custom Names",
-        "category": "Antigravity Monitor"
+        "category": "Antigravity Model Monitor"
       },
       {
         "command": "agModelMonitor.dumpStateKeys",
         "title": "Dump State DB Keys (debug)",
-        "category": "Antigravity Monitor"
+        "category": "Antigravity Model Monitor"
       },
       {
         "command": "agModelMonitor.dumpKeyValue",
         "title": "Inspect State DB Key Value (debug)",
-        "category": "Antigravity Monitor"
+        "category": "Antigravity Model Monitor"
       }
     ],
     "configuration": {
@@ -90,7 +90,12 @@
         "agModelMonitor.logLevel": {
           "type": "string",
           "default": "info",
-          "enum": ["debug", "info", "warn", "error"],
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ],
           "description": "Log level for the output channel."
         },
         "agModelMonitor.showCreditsInStatusBar": {

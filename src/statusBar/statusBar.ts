@@ -27,7 +27,7 @@ export class StatusBarController {
   ) {
     this.item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
     this.item.command = 'agModelMonitor.openPanel';
-    this.item.text = '$(sync~spin) AG Monitor';
+    this.item.text = '$(sync~spin) AG Model Monitor';
     this.item.tooltip = 'Antigravity Model Monitor — loading...';
     this.item.show();
   }
@@ -51,7 +51,7 @@ export class StatusBarController {
     const { latest, names, thresholds } = this;
 
     if (latest.error && !latest.snapshot) {
-      this.item.text = `$(warning) AG Monitor`;
+      this.item.text = `$(warning) AG Model Monitor`;
       this.item.tooltip = buildErrorTooltip(latest.error);
       this.item.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
       return;
@@ -59,7 +59,7 @@ export class StatusBarController {
 
     const snapshot = latest.snapshot;
     if (!snapshot || snapshot.groups.length === 0) {
-      this.item.text = latest.isLoading ? `$(sync~spin) AG Monitor` : `$(warning) AG Monitor`;
+      this.item.text = latest.isLoading ? `$(sync~spin) AG Model Monitor` : `$(warning) AG Model Monitor`;
       this.item.tooltip = snapshot ? 'No model quota data available.' : 'Loading…';
       this.item.backgroundColor = snapshot ? new vscode.ThemeColor('statusBarItem.warningBackground') : undefined;
       return;
@@ -69,7 +69,7 @@ export class StatusBarController {
 
     if (visibleGroups.length === 0) {
       // Everything hidden by the user — keep the bar visible but minimal.
-      this.item.text = '$(eye-closed) AG Monitor';
+      this.item.text = '$(eye-closed) AG Model Monitor';
       this.item.tooltip = buildAllHiddenTooltip(latest.availableCredits, latest.lastUpdatedAt);
       this.item.backgroundColor = undefined;
       return;

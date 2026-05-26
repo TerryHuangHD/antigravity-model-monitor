@@ -37,10 +37,10 @@ All commands can be invoked from the command palette (`Cmd+Shift+P` on macOS, `C
 
 | Command | What it does |
 |---|---|
-| `Antigravity Monitor: Open Antigravity Monitor` | Open the premium management webview dashboard. |
-| `Antigravity Monitor: Refresh Antigravity Quota` | Instantly fetch the latest quota from the API. |
-| `Antigravity Monitor: Show Logs` | Open the extension's dedicated Output Channel. |
-| `Antigravity Monitor: Reset All Custom Names` | Instantly reset all custom renames and visibility states. |
+| `Antigravity Model Monitor: Open Antigravity Model Monitor` | Open the premium management webview dashboard. |
+| `Antigravity Model Monitor: Refresh Antigravity Quota` | Instantly fetch the latest quota from the API. |
+| `Antigravity Model Monitor: Show Logs` | Open the extension's dedicated Output Channel. |
+| `Antigravity Model Monitor: Reset All Custom Names` | Instantly reset all custom renames and visibility states. |
 
 ---
 

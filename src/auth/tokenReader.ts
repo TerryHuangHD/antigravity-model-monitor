@@ -189,7 +189,7 @@ export async function readRefreshTokenFromAntigravity(): Promise<AntigravityRefr
 
   throw new Error(
     'No Antigravity OAuth refresh_token found in state.vscdb. ' +
-    'Sign in to Antigravity, or run "Antigravity Monitor: Dump State DB Keys" ' +
+    'Sign in to Antigravity, or run "Antigravity Model Monitor: Dump State DB Keys" ' +
     'from the command palette to see what keys are present.'
   );
 }
