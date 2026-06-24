@@ -2,13 +2,14 @@ import * as vscode from 'vscode';
 import { log } from './log';
 import {
   dumpRelevantStateKeys,
-  readAccessTokenFromAntigravity,
   readRefreshTokenFromAntigravity,
   readStateValueByKey
 } from './auth/tokenReader';
 import { describeProtobuf, extractPrintableStrings } from './auth/inspect';
 import { OAuthRefresher } from './auth/oauthRefresher';
 import { RefreshManager } from './quota/refreshManager';
+import { fetchLocalLanguageServerModels } from './api/localLanguageServerClient';
+import { groupByFamily } from './quota/grouping';
 import { CustomNamesStore } from './state/customNames';
 import { StatusBarController, ThresholdConfig } from './statusBar/statusBar';
 import { ManagementPanel } from './webview/panel';
@@ -81,6 +82,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('agModelMonitor.openPanel', () => panel.show()),
     vscode.commands.registerCommand('agModelMonitor.refresh', () => manager.refresh()),
     vscode.commands.registerCommand('agModelMonitor.showLogs', () => log.show()),
+    vscode.commands.registerCommand('agModelMonitor.diagnoseLocalQuota', async () => {
+      log.show();
+      try {
+        const entries = await fetchLocalLanguageServerModels();
+        const groups = groupByFamily(entries);
+        const summary = summarizeGroupsForLog(groups);
+        log.info(`[diagnose-local-quota] loaded ${entries.length} local quota models`);
+        log.info(`[diagnose-local-quota] ${summary}`);
+        void vscode.window.showInformationMessage(`Local quota source OK: ${summary}`);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        log.error(`[diagnose-local-quota] failed: ${message}`);
+        void vscode.window.showWarningMessage(`Local quota source failed: ${message}`);
+      }
+    }),
     vscode.commands.registerCommand('agModelMonitor.resetCustomNames', async () => {
       const choice = await vscode.window.showWarningMessage(
         'Clear all custom names for Antigravity Model Monitor?',
@@ -193,4 +209,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
 export function deactivate(): void {
   // Disposables registered in context.subscriptions handle cleanup.
+}
+
+function summarizeGroupsForLog(groups: ReturnType<typeof groupByFamily>): string {
+  if (groups.length === 0) return 'no groups';
+  return groups.map((group) => {
+    const members = group.members
+      .map((member) => `${member.label}=${Math.round(member.remainingFraction * 100)}%`)
+      .join(', ');
+    return `${group.autoName}: ${members}`;
+  }).join(' | ');
 }

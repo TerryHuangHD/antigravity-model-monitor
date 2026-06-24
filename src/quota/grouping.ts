@@ -20,28 +20,55 @@ export interface ParsedSnapshot {
 }
 
 /**
- * Family detection rules. Order matters — first match wins.
- * Patterns are matched against the lower-cased display label first, then the
- * lower-cased model id, so the API's `displayName` drives the bucket when present.
+ * Family detection rules aligned with Antigravity's built-in quota dashboard.
+ * The official UI rolls model rows up into two cards: Gemini, and Claude/GPT.
  */
 const FAMILY_RULES: Array<{ key: string; display: string; pattern: RegExp }> = [
-  { key: 'gemini',  display: 'Gemini Models',  pattern: /\bgemini\b/ },
+  { key: 'gemini', display: 'Gemini Models', pattern: /\bgemini\b/ },
 ];
 
 function detectFamily(entry: ModelEntry): { key: string; display: string } {
   const haystack = (entry.label + ' ' + entry.modelId).toLowerCase();
+  if (/\bmodel_placeholder_m(?:47|37|36)\b/.test(haystack)) {
+    return { key: 'gemini', display: 'Gemini Models' };
+  }
   for (const rule of FAMILY_RULES) {
     if (rule.pattern.test(haystack)) return { key: rule.key, display: rule.display };
   }
   return { key: 'claude-gpt', display: 'Claude and GPT models' };
 }
 
-function isWeeklyLimitModel(entry: ModelEntry): boolean {
-  const haystack = (entry.label + ' ' + entry.modelId).toLowerCase();
-  return haystack.includes('low') || haystack.includes('extra-low') || haystack.includes('medium') || haystack.includes('sonnet');
+// Antigravity's local language server (GetUserStatus) reports a single quota window
+// per model: the one that is currently binding. When the five-hour limit is the
+// active constraint the resetTime is hours away; when the weekly limit binds it is
+// days away. We label the limit from that reset window rather than fabricating two
+// separate rows, because only one window is ever present in the data.
+const FIVE_HOUR_WINDOW_MAX_MS = 6 * 60 * 60 * 1000;
+
+function limitLabel(resetTime: Date | null, now: number): string {
+  if (!resetTime) return 'Quota';
+  return resetTime.getTime() - now <= FIVE_HOUR_WINDOW_MAX_MS ? 'Five Hour Limit' : 'Weekly Limit';
 }
 
-export function parseSnapshot(response: FetchAvailableModelsResponse): ParsedSnapshot {
+function getLowestLimit(items: ModelEntry[]): { remainingFraction: number; resetTime: Date | null } {
+  if (items.length === 0) return { remainingFraction: 1, resetTime: null };
+  let minItem = items[0];
+  for (const item of items) {
+    if (item.remainingFraction < minItem.remainingFraction) {
+      minItem = item;
+    } else if (item.remainingFraction === minItem.remainingFraction) {
+      if (item.resetTime && (!minItem.resetTime || item.resetTime > minItem.resetTime)) {
+        minItem = item;
+      }
+    }
+  }
+  return {
+    remainingFraction: minItem.remainingFraction,
+    resetTime: minItem.resetTime
+  };
+}
+
+export function parseSnapshot(response: FetchAvailableModelsResponse, now: number = Date.now()): ParsedSnapshot {
   const models = response.models ?? {};
   const entries: ModelEntry[] = [];
 
@@ -65,78 +92,36 @@ export function parseSnapshot(response: FetchAvailableModelsResponse): ParsedSna
     });
   }
 
-  return { groups: groupByFamily(entries), totalModelCount: entries.length };
+  return { groups: groupByFamily(entries, now), totalModelCount: entries.length };
 }
 
-export function groupByFamily(entries: ModelEntry[]): FamilyGroup[] {
-  const geminiEntries: ModelEntry[] = [];
-  const claudeGptEntries: ModelEntry[] = [];
+export function groupByFamily(entries: ModelEntry[], now: number = Date.now()): FamilyGroup[] {
+  const byFamily = new Map<string, { display: string; entries: ModelEntry[] }>();
 
   for (const entry of entries) {
     const family = detectFamily(entry);
-    if (family.key === 'gemini') {
-      geminiEntries.push(entry);
-    } else {
-      claudeGptEntries.push(entry);
-    }
+    const bucket = byFamily.get(family.key) ?? { display: family.display, entries: [] };
+    bucket.entries.push(entry);
+    byFamily.set(family.key, bucket);
   }
-
-  const buildGroup = (key: string, displayName: string, groupEntries: ModelEntry[]): FamilyGroup => {
-    const weeklyEntries = groupEntries.filter(isWeeklyLimitModel);
-    const fiveHourEntries = groupEntries.filter(e => !isWeeklyLimitModel(e));
-
-    const getLimit = (items: ModelEntry[]): { remainingFraction: number; resetTime: Date | null } => {
-      if (items.length === 0) return { remainingFraction: 1.0, resetTime: null };
-      let minItem = items[0];
-      for (const item of items) {
-        if (item.remainingFraction < minItem.remainingFraction) {
-          minItem = item;
-        } else if (item.remainingFraction === minItem.remainingFraction) {
-          if (item.resetTime && (!minItem.resetTime || item.resetTime > minItem.resetTime)) {
-            minItem = item;
-          }
-        }
-      }
-      return {
-        remainingFraction: minItem.remainingFraction,
-        resetTime: minItem.resetTime
-      };
-    };
-
-    const weekly = getLimit(weeklyEntries);
-    const fiveHour = getLimit(fiveHourEntries);
-
-    const members: ModelEntry[] = [
-      {
-        modelId: `${key}-5hour`,
-        label: 'Five Hour Limit',
-        remainingFraction: fiveHour.remainingFraction,
-        resetTime: fiveHour.resetTime
-      },
-      {
-        modelId: `${key}-weekly`,
-        label: 'Weekly Limit',
-        remainingFraction: weekly.remainingFraction,
-        resetTime: weekly.resetTime
-      }
-    ];
-
-    const minRemaining = Math.min(weekly.remainingFraction, fiveHour.remainingFraction);
-
-    return {
-      key,
-      autoName: displayName,
-      members,
-      minRemainingFraction: minRemaining
-    };
-  };
 
   const groups: FamilyGroup[] = [];
-  if (geminiEntries.length > 0) {
-    groups.push(buildGroup('gemini', 'Gemini Models', geminiEntries));
-  }
-  if (claudeGptEntries.length > 0) {
-    groups.push(buildGroup('claude-gpt', 'Claude and GPT models', claudeGptEntries));
+  for (const [key, bucket] of byFamily) {
+    const binding = getLowestLimit(bucket.entries);
+    const members: ModelEntry[] = [
+      {
+        modelId: `${key}-limit`,
+        label: limitLabel(binding.resetTime, now),
+        remainingFraction: binding.remainingFraction,
+        resetTime: binding.resetTime
+      }
+    ];
+    groups.push({
+      key,
+      autoName: bucket.display,
+      members,
+      minRemainingFraction: binding.remainingFraction
+    });
   }
 
   groups.sort((a, b) => a.minRemainingFraction - b.minRemainingFraction);

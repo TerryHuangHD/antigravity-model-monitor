@@ -2,7 +2,7 @@
   "name": "antigravity-model-monitor",
   "displayName": "Antigravity Model Monitor",
   "description": "Status-bar monitor for Antigravity AI model quotas. Click to manage model and group display names.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publisher": "terryhuanghd",
   "repository": {
     "type": "git",
@@ -44,6 +44,11 @@
       {
         "command": "agModelMonitor.showLogs",
         "title": "Show Logs",
+        "category": "Antigravity Model Monitor"
+      },
+      {
+        "command": "agModelMonitor.diagnoseLocalQuota",
+        "title": "Diagnose Local Quota Source (debug)",
         "category": "Antigravity Model Monitor"
       },
       {

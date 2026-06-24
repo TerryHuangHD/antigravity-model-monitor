@@ -110,12 +110,15 @@ function getField(fields: ProtoField[], num: number): ProtoField | undefined {
   return fields.find(f => f.num === num);
 }
 
+const UINT64_MINUS_ONE_THRESHOLD = Number('18446744073709550000');
+const UINT64_MINUS_ONE = Number('18446744073709551615');
+
 function getInt(fields: ProtoField[], num: number, def = 0): number {
   const f = getField(fields, num);
   if (f && f.asNumber !== undefined) {
-    let val = f.asNumber;
+    const val = f.asNumber;
     // Handle protobuf varint representation of -1
-    if (val > 18446744073709550000n || val === 18446744073709551615 || val === -1) {
+    if (val > UINT64_MINUS_ONE_THRESHOLD || val === UINT64_MINUS_ONE || val === -1) {
       return -1;
     }
     return val;

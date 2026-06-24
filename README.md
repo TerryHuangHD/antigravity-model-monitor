@@ -9,7 +9,7 @@ A small VS Code extension for the [Antigravity](https://antigravity.google) AI e
 
 ## Features
 
-- **Status Bar Monitor** — Shows the quota group with the lowest remaining percent (e.g. `🚀 Sonnet: 87%`). 
+- **Status Bar Monitor** — Shows each tracked family's binding limit, color-coded (e.g. `🟢 Gemini 5h: 84%  🟢 Claude/GPT 7d: 97%`); the bar's background reflects the lowest-remaining family.
   - **Color-Coded Alert Thresholds**: green (OK) / yellow (warning, ≤30%) / red (critical, ≤10%).
   - **Dynamic Tooltip**: Hovering over the status item reveals a beautiful markdown table detailing all tracked model groups.
 - **Premium Management Panel** — A beautiful, responsive glassmorphic dashboard where you can:
@@ -25,9 +25,9 @@ A small VS Code extension for the [Antigravity](https://antigravity.google) AI e
 
 ## Requirements
 
-This extension runs **inside the Antigravity editor itself**. It securely reads your signed-in Antigravity OAuth refresh token from the editor's database (`state.vscdb`), exchanges it via Google's OAuth endpoint, and calls Antigravity's quota API directly.
+This extension runs **inside the Antigravity editor itself**. It reads quota primarily from Antigravity's **local language server** — the same `GetUserStatus` endpoint that powers the built-in quota dashboard. For account credits, and as a fallback when the local server is unavailable, it also reads your signed-in OAuth refresh token from the editor's database (`state.vscdb`), exchanges it via Google's OAuth endpoint, and calls Antigravity's remote quota API.
 
-If the extension cannot locate an active token, it displays a status-bar warning and provides troubleshooting guidance in its output channel logs.
+If the extension cannot reach either source, it displays a status-bar warning and provides troubleshooting guidance in its output channel logs.
 
 ---
 
@@ -61,9 +61,11 @@ Customize the extension's behavior in your VS Code settings under the `Antigravi
 
 ## How Grouping Works
 
-Antigravity returns one quota entry per model, but several models often share the same quota pool. This extension groups models that have identical `remainingFraction + resetTime` into one group automatically. You can give each group its own display name — but you cannot manually move a model between groups. When the quota resets, groups are re-derived from fresh API data.
+Antigravity returns one quota entry per model — a remaining percentage and a reset time — and its built-in dashboard rolls those rows up into two cards: `Gemini Models` and `Claude and GPT models`. This extension uses the same two cards.
 
-Because group identity depends on the live quota signature, custom group names persist only as long as the underlying pool keeps the same `remainingFraction + resetTime` between refreshes.
+Each card shows a single limit: the **lowest remaining percentage** among that family's models — the most conservative, currently-binding constraint. That limit is labeled from its reset window: `Five Hour Limit` when the reset is within six hours, `Weekly Limit` when it is days away (and `Quota` if no reset time is reported).
+
+Antigravity's quota API only reports the **currently-binding** window per model — whichever limit you are closest to hitting — so only one of the two limits is observable at a time. While the short-term cap is the tighter constraint you'll see `Five Hour Limit`; once the weekly cap binds it switches to `Weekly Limit`. The built-in dashboard can show both at once because it pulls additional data this extension does not have access to.
 
 ---
 
@@ -92,9 +94,10 @@ src/
 │   ├── tokenReader.ts      Reads refresh_token from state.vscdb using sql.js
 │   └── oauthRefresher.ts   Exchanges refresh_token for access_token
 ├── api/
-│   └── cloudCodeClient.ts  Calls API endpoint (fetchAvailableModels)
+│   ├── localLanguageServerClient.ts  Primary source: reads GetUserStatus from the local server
+│   └── cloudCodeClient.ts  Remote fallback API (fetchAvailableModels) + account credits
 ├── quota/
-│   ├── grouping.ts         Resolves raw model quota into unified QuotaGroups
+│   ├── grouping.ts         Resolves raw model quota into one per-family limit (labeled by reset window)
 │   └── refreshManager.ts   Main timer loop, state, and refresh triggers
 ├── state/
 │   └── customNames.ts      Renaming/hiding state persistence (globalState)
