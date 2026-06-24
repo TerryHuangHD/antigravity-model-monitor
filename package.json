@@ -4,6 +4,10 @@
   "description": "Status-bar monitor for Antigravity AI model quotas. Click to manage model and group display names.",
   "version": "0.3.0",
   "publisher": "terryhuanghd",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TerryHuangHD/antigravity-model-monitor.git"
+  },
   "engines": {
     "vscode": "^1.90.0"
   },
