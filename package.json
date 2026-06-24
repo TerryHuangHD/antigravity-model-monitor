@@ -2,7 +2,7 @@
   "name": "antigravity-model-monitor",
   "displayName": "Antigravity Model Monitor",
   "description": "Status-bar monitor for Antigravity AI model quotas. Click to manage model and group display names.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "terryhuanghd",
   "engines": {
     "vscode": "^1.90.0"

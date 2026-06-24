@@ -25,12 +25,7 @@ export interface ParsedSnapshot {
  * lower-cased model id, so the API's `displayName` drives the bucket when present.
  */
 const FAMILY_RULES: Array<{ key: string; display: string; pattern: RegExp }> = [
-  { key: 'claude',  display: 'Claude',  pattern: /\bclaude\b/ },
-  { key: 'gemini',  display: 'Gemini',  pattern: /\bgemini\b/ },
-  { key: 'gpt-oss', display: 'GPT-OSS', pattern: /\bgpt[-_ ]?oss\b/ },
-  { key: 'gpt',     display: 'GPT',     pattern: /\bgpt\b/ },
-  { key: 'llama',   display: 'Llama',   pattern: /\bllama\b/ },
-  { key: 'mistral', display: 'Mistral', pattern: /\bmistral\b/ }
+  { key: 'gemini',  display: 'Gemini Models',  pattern: /\bgemini\b/ },
 ];
 
 function detectFamily(entry: ModelEntry): { key: string; display: string } {
@@ -38,7 +33,12 @@ function detectFamily(entry: ModelEntry): { key: string; display: string } {
   for (const rule of FAMILY_RULES) {
     if (rule.pattern.test(haystack)) return { key: rule.key, display: rule.display };
   }
-  return { key: 'other', display: 'Other' };
+  return { key: 'claude-gpt', display: 'Claude and GPT models' };
+}
+
+function isWeeklyLimitModel(entry: ModelEntry): boolean {
+  const haystack = (entry.label + ' ' + entry.modelId).toLowerCase();
+  return haystack.includes('low') || haystack.includes('extra-low') || haystack.includes('medium') || haystack.includes('sonnet');
 }
 
 export function parseSnapshot(response: FetchAvailableModelsResponse): ParsedSnapshot {
@@ -69,40 +69,77 @@ export function parseSnapshot(response: FetchAvailableModelsResponse): ParsedSna
 }
 
 export function groupByFamily(entries: ModelEntry[]): FamilyGroup[] {
-  const buckets = new Map<string, { display: string; members: ModelEntry[] }>();
+  const geminiEntries: ModelEntry[] = [];
+  const claudeGptEntries: ModelEntry[] = [];
 
   for (const entry of entries) {
     const family = detectFamily(entry);
-    const bucket = buckets.get(family.key);
-    if (bucket) bucket.members.push(entry);
-    else buckets.set(family.key, { display: family.display, members: [entry] });
+    if (family.key === 'gemini') {
+      geminiEntries.push(entry);
+    } else {
+      claudeGptEntries.push(entry);
+    }
   }
+
+  const buildGroup = (key: string, displayName: string, groupEntries: ModelEntry[]): FamilyGroup => {
+    const weeklyEntries = groupEntries.filter(isWeeklyLimitModel);
+    const fiveHourEntries = groupEntries.filter(e => !isWeeklyLimitModel(e));
+
+    const getLimit = (items: ModelEntry[]): { remainingFraction: number; resetTime: Date | null } => {
+      if (items.length === 0) return { remainingFraction: 1.0, resetTime: null };
+      let minItem = items[0];
+      for (const item of items) {
+        if (item.remainingFraction < minItem.remainingFraction) {
+          minItem = item;
+        } else if (item.remainingFraction === minItem.remainingFraction) {
+          if (item.resetTime && (!minItem.resetTime || item.resetTime > minItem.resetTime)) {
+            minItem = item;
+          }
+        }
+      }
+      return {
+        remainingFraction: minItem.remainingFraction,
+        resetTime: minItem.resetTime
+      };
+    };
+
+    const weekly = getLimit(weeklyEntries);
+    const fiveHour = getLimit(fiveHourEntries);
+
+    const members: ModelEntry[] = [
+      {
+        modelId: `${key}-5hour`,
+        label: 'Five Hour Limit',
+        remainingFraction: fiveHour.remainingFraction,
+        resetTime: fiveHour.resetTime
+      },
+      {
+        modelId: `${key}-weekly`,
+        label: 'Weekly Limit',
+        remainingFraction: weekly.remainingFraction,
+        resetTime: weekly.resetTime
+      }
+    ];
+
+    const minRemaining = Math.min(weekly.remainingFraction, fiveHour.remainingFraction);
+
+    return {
+      key,
+      autoName: displayName,
+      members,
+      minRemainingFraction: minRemaining
+    };
+  };
 
   const groups: FamilyGroup[] = [];
-  for (const [key, bucket] of buckets.entries()) {
-    bucket.members.sort((a, b) => a.label.localeCompare(b.label));
-    const minRemaining = bucket.members.reduce(
-      (m, e) => Math.min(m, e.remainingFraction),
-      Infinity
-    );
-    groups.push({
-      key,
-      autoName: bucket.display,
-      members: bucket.members,
-      minRemainingFraction: Number.isFinite(minRemaining) ? minRemaining : 0
-    });
+  if (geminiEntries.length > 0) {
+    groups.push(buildGroup('gemini', 'Gemini Models', geminiEntries));
+  }
+  if (claudeGptEntries.length > 0) {
+    groups.push(buildGroup('claude-gpt', 'Claude and GPT models', claudeGptEntries));
   }
 
-  // Sort: lowest remaining first so the most urgent family is leftmost in the
-  // status bar. "Other" trails so well-known families sort first when tied.
-  groups.sort((a, b) => {
-    if (a.minRemainingFraction !== b.minRemainingFraction) {
-      return a.minRemainingFraction - b.minRemainingFraction;
-    }
-    if (a.key === 'other') return 1;
-    if (b.key === 'other') return -1;
-    return a.autoName.localeCompare(b.autoName);
-  });
+  groups.sort((a, b) => a.minRemainingFraction - b.minRemainingFraction);
 
   return groups;
 }

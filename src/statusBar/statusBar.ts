@@ -143,10 +143,22 @@ function formatStatusBarText(
   const parts: string[] = [];
   if (thresholds.showCredits && credits != null) parts.push(`$(rocket) Credits: ${formatNumber(credits)}`);
   for (const group of groups) {
-    const pct = Math.round(group.effectiveMinFraction * 100);
-    const dot = pickDot(pct, thresholds);
-    const name = names.getGroupName(group.key, group.autoName);
-    parts.push(`${dot} ${name}: ${pct}%`);
+    for (const member of group.members) {
+      const pct = Math.round(member.remainingFraction * 100);
+      const dot = pickDot(pct, thresholds);
+      const groupName = names.getGroupName(group.key, group.autoName);
+      const memberName = names.getModelName(member.modelId, member.label);
+
+      let shortGroupName = groupName;
+      if (groupName === 'Gemini Models') shortGroupName = 'Gemini';
+      else if (groupName === 'Claude and GPT models') shortGroupName = 'Claude/GPT';
+
+      let shortLabel = memberName;
+      if (memberName === 'Five Hour Limit') shortLabel = '5h';
+      else if (memberName === 'Weekly Limit') shortLabel = '7d';
+
+      parts.push(`${dot} ${shortGroupName} ${shortLabel}: ${pct}%`);
+    }
   }
   return parts.join('  ');
 }
@@ -203,7 +215,7 @@ function buildTooltip(
   for (const group of groups) {
     const groupName = names.getGroupName(group.key, group.autoName);
     md.appendMarkdown(`**${escapeMd(groupName)}**\n\n`);
-    md.appendMarkdown('| | Model | | Remaining | Reset |\n');
+    md.appendMarkdown('| | Limit | | Remaining | Reset |\n');
     md.appendMarkdown('|---|---|---|---:|---|\n');
     for (const member of group.members /* already filtered to visible */) {
       const label = names.getModelName(member.modelId, member.label);
@@ -253,9 +265,20 @@ function formatReset(resetTime: Date): string {
   const minutes = Math.floor(diffMs / 60000);
   const hours = Math.floor(minutes / 60);
   const days = Math.floor(hours / 24);
-  if (days > 0) return `${days}d ${hours % 24}h`;
-  if (hours > 0) return `${hours}h ${minutes % 60}m`;
-  return `${minutes}m`;
+
+  const month = resetTime.getMonth() + 1;
+  const date = resetTime.getDate();
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  const hh = pad(resetTime.getHours());
+  const mm = pad(resetTime.getMinutes());
+  const absoluteStr = `${month}/${date} ${hh}:${mm}`;
+
+  let relativeStr = '';
+  if (days > 0) relativeStr = `${days}d ${hours % 24}h`;
+  else if (hours > 0) relativeStr = `${hours}h ${minutes % 60}m`;
+  else relativeStr = `${minutes}m`;
+
+  return `${relativeStr} (${absoluteStr})`;
 }
 
 function formatRelative(date: Date, past = false): string {

@@ -21,10 +21,10 @@ describe('parseSnapshot', () => {
     });
     expect(r.totalModelCount).toBe(1);
     expect(r.groups).toHaveLength(1);
-    expect(r.groups[0].members.map((m) => m.label)).toEqual(['Claude Sonnet']);
+    expect(r.groups[0].members.find(m => m.modelId === 'claude-gpt-weekly')?.remainingFraction).toBe(0.5);
   });
 
-  it('separates Claude and Gemini into different family groups', () => {
+  it('separates Claude/GPT and Gemini into different family groups', () => {
     const r = parseSnapshot({
       models: {
         a: { displayName: 'Claude Sonnet 4.6', model: 'A', quotaInfo: { remainingFraction: 0.6, resetTime: RESET_A } },
@@ -33,7 +33,7 @@ describe('parseSnapshot', () => {
     });
     expect(r.groups).toHaveLength(2);
     const keys = r.groups.map((g) => g.key);
-    expect(keys.sort()).toEqual(['claude', 'gemini']);
+    expect(keys.sort()).toEqual(['claude-gpt', 'gemini']);
   });
 
   it('uses lowest member fraction as group min', () => {
@@ -44,16 +44,19 @@ describe('parseSnapshot', () => {
       }
     });
     expect(r.groups[0].minRemainingFraction).toBeCloseTo(0.4);
+    // Weekly (Medium) is 0.4, 5-hour is 1.0 (since no 5-hour model was present in input)
+    expect(r.groups[0].members.find(m => m.modelId === 'gemini-weekly')?.remainingFraction).toBe(0.4);
+    expect(r.groups[0].members.find(m => m.modelId === 'gemini-5hour')?.remainingFraction).toBe(1.0);
   });
 
-  it('falls back to "Other" for unknown families', () => {
+  it('groups unknown/other families under Claude/GPT models', () => {
     const r = parseSnapshot({
       models: {
         a: { displayName: 'chat_20706', model: 'A', quotaInfo: { remainingFraction: 0.5, resetTime: RESET_A } }
       }
     });
     expect(r.groups).toHaveLength(1);
-    expect(r.groups[0].key).toBe('other');
+    expect(r.groups[0].key).toBe('claude-gpt');
   });
 });
 
@@ -63,15 +66,16 @@ describe('groupByFamily ordering', () => {
       model('Gemini Pro', 'gemini-pro', 0.8),
       model('Claude Sonnet', 'claude-sonnet', 0.2)
     ]);
-    expect(groups.map((g) => g.key)).toEqual(['claude', 'gemini']);
+    expect(groups.map((g) => g.key)).toEqual(['claude-gpt', 'gemini']);
   });
 
-  it('puts "other" last when tied', () => {
+  it('groups all non-gemini together', () => {
     const groups = groupByFamily([
       model('chat_1', 'x_1', 1.0),
       model('Claude', 'claude', 1.0),
       model('Gemini', 'gemini', 1.0)
     ]);
-    expect(groups[groups.length - 1].key).toBe('other');
+    expect(groups).toHaveLength(2);
+    expect(groups.map(g => g.key).sort()).toEqual(['claude-gpt', 'gemini']);
   });
 });
