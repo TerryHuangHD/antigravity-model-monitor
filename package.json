@@ -2,7 +2,7 @@
   "name": "antigravity-model-monitor",
   "displayName": "AI Subscription Usage Monitor",
   "description": "Monitor Antigravity, Claude Code, and Codex subscription usage from one VS Code status bar.",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "publisher": "terryhuanghd",
   "repository": {
     "type": "git",
