@@ -38,6 +38,12 @@ describe('CustomNamesStore', () => {
 
   it('resetAll wipes everything', async () => {
     const store = new CustomNamesStore(new FakeMemento());
+    await store.setSubscriptionName('codex', 'Work Codex');
+    await store.setContentName('codex:weekly', 'Week');
+    await store.setSubscriptionHidden('claude-code', true);
+    await store.setContentHidden('codex:weekly', true);
+    await store.setSubscriptionOrder(['codex', 'antigravity', 'claude-code']);
+    await store.setContentOrder('codex', ['codex:weekly']);
     await store.setGroupName('g1', 'Pool');
     await store.setModelName('m1', 'Mod');
     await store.setGroupHidden('g1', true);
@@ -45,6 +51,12 @@ describe('CustomNamesStore', () => {
     await store.setModelOrder('g1', ['m2', 'm1']);
     await store.resetAll();
     const snap = store.snapshot();
+    expect(snap.subscriptionNames).toEqual({});
+    expect(snap.contentNames).toEqual({});
+    expect(snap.hiddenSubscriptions).toEqual({});
+    expect(snap.hiddenContents).toEqual({});
+    expect(snap.subscriptionOrder).toEqual([]);
+    expect(snap.contentOrder).toEqual({});
     expect(snap.groups).toEqual({});
     expect(snap.models).toEqual({});
     expect(snap.hiddenGroups).toEqual({});
@@ -63,6 +75,44 @@ describe('CustomNamesStore', () => {
     await store.setModelOrder('g1', ['m1']);
     await store.resetAll();
     expect(count).toBe(6);
+  });
+
+  describe('unified subscription customization', () => {
+    it('persists subscription and content names and visibility', async () => {
+      const memento = new FakeMemento();
+      const first = new CustomNamesStore(memento);
+      await first.setSubscriptionName('claude-code', 'Claude Personal');
+      await first.setContentName('claude-code:weekly', 'Weekly budget');
+      await first.setSubscriptionHidden('codex', true);
+      await first.setContentHidden('claude-code:five-hour', true);
+
+      const second = new CustomNamesStore(memento);
+      expect(second.getSubscriptionName('claude-code', 'Claude Code')).toBe('Claude Personal');
+      expect(second.getContentName('claude-code:weekly', 'Weekly Limit')).toBe('Weekly budget');
+      expect(second.isSubscriptionHidden('codex')).toBe(true);
+      expect(second.isContentHidden('claude-code:five-hour')).toBe(true);
+    });
+
+    it('orders subscriptions and contents while appending new items', async () => {
+      const store = new CustomNamesStore(new FakeMemento());
+      await store.setSubscriptionOrder(['codex', 'antigravity']);
+      await store.setContentOrder('claude-code', ['claude-code:weekly', 'claude-code:five-hour']);
+
+      expect(store.orderSubscriptions([
+        { key: 'antigravity' },
+        { key: 'claude-code' },
+        { key: 'codex' }
+      ]).map((item) => item.key)).toEqual(['codex', 'antigravity', 'claude-code']);
+      expect(store.orderContents('claude-code', [
+        { id: 'claude-code:five-hour' },
+        { id: 'claude-code:weekly' },
+        { id: 'claude-code:new' }
+      ]).map((item) => item.id)).toEqual([
+        'claude-code:weekly',
+        'claude-code:five-hour',
+        'claude-code:new'
+      ]);
+    });
   });
 
   describe('visibility', () => {

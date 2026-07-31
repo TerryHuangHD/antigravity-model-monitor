@@ -1,116 +1,127 @@
-# Antigravity Model Monitor
+# AI Subscription Usage Monitor
 
-A small VS Code extension for the [Antigravity](https://antigravity.google) AI editor that shows your current model quota in the **status bar** and lets you rename models and quota groups in an elegant, state-of-the-art interactive panel.
+A VS Code/Antigravity extension that shows Antigravity, Claude Code, and Codex subscription usage in one status-bar item and dashboard.
 
-> Inspired by [`vscode-antigravity-cockpit`](https://github.com/jlcodes99/vscode-antigravity-cockpit).
-> This extension is a lightweight version focused on a single status-bar item plus a premium manage UI.
+The extension reads local signed-in sessions. It does not ask you to paste API keys or copy OAuth tokens into settings.
 
----
+## Monitored subscriptions
+
+| Subscription | Limits shown | Data source |
+| --- | --- | --- |
+| Antigravity | Authoritative five-hour and weekly model-family limits | Antigravity local language server, with the existing OAuth/cloud fallback |
+| Claude Code | Five-hour and weekly limits | Claude Code's locally stored OAuth session and the same usage endpoint used by the installed CLI |
+| Codex | Weekly limit | Official local `codex app-server` method `account/rateLimits/read` |
+
+Claude usage is shared across Claude product surfaces, including Claude Code. Codex local and cloud usage also share plan limits. The dashboard therefore reports subscription windows, not usage generated only by this extension.
 
 ## Features
 
-- **Status Bar Monitor** — Shows each tracked family's binding limit, color-coded (e.g. `🟢 Gemini 5h: 84%  🟢 Claude/GPT 7d: 97%`); the bar's background reflects the lowest-remaining family.
-  - **Color-Coded Alert Thresholds**: green (OK) / yellow (warning, ≤30%) / red (critical, ≤10%).
-  - **Dynamic Tooltip**: Hovering over the status item reveals a beautiful markdown table detailing all tracked model groups.
-- **Premium Management Panel** — A beautiful, responsive glassmorphic dashboard where you can:
-  - Give model families and individual models custom friendly names that update everywhere in real-time.
-  - Quick-toggle visibility to hide or show specific families/models in the status bar.
-  - Review plan details (e.g., email, tier level, context windows) in a sleek, interactive, and expandable grid.
-  - Toggle sensitive plan data visibility and configure refresh intervals.
-- **Micro-Animations** — Delightful slide-up staggered animations on load, pulsing status glow effects, and smooth card elevations on hover.
-- **No Sidebar Clutter** — Minimalist footprint, keeping all UI options tucked neatly inside the status bar and the command palette.
-- **Toast Notifications** — Instant alerts when any quota group crosses warning or critical thresholds.
-
----
+- One color-coded status-bar summary for every available subscription.
+- Three independent, consistently structured cards for Antigravity, Claude Code, and Codex.
+- Rename, show/hide, and drag all three subscriptions to control status-bar and tooltip order.
+- Rename, show/hide, and drag every quota content row inside each subscription.
+- Last-known Claude/Codex values remain visible when a later refresh fails.
+- Existing Antigravity family/model customizations are honored when upgrading to the unified layout.
+- Antigravity account details are intentionally limited to **Account** and **Description**. The previous tier, feature, upgrade, and plan-detail grid is no longer displayed.
+- Warning and critical notifications apply to limits from all three subscriptions.
 
 ## Requirements
 
-This extension runs **inside the Antigravity editor itself**. It reads quota primarily from Antigravity's **local language server** — using the same `RetrieveUserQuotaSummary` data that powers the built-in quota dashboard. For account credits, and as a fallback when the local server is unavailable, it also reads your signed-in OAuth refresh token from the editor's database (`state.vscdb`), exchanges it via Google's OAuth endpoint, and calls Antigravity's remote quota API.
+### Antigravity
 
-If the extension cannot reach either source, it displays a status-bar warning and provides troubleshooting guidance in its output channel logs.
+Run the extension inside Antigravity and sign in normally. Its existing quota integration is unchanged.
 
----
+### Claude Code
+
+Install Claude Code and sign in with a Claude subscription:
+
+```bash
+claude auth login
+claude auth status
+```
+
+On macOS, Claude Code stores its OAuth credential in Keychain. On other supported environments, the extension checks Claude Code's `.credentials.json` under `CLAUDE_CONFIG_DIR` or `~/.claude`.
+
+Claude's subscription usage endpoint is part of the Claude Code client flow rather than a documented public API. If Anthropic changes that client contract, the Claude card will report the failure without affecting Antigravity or Codex.
+
+### Codex
+
+Install a current Codex CLI and sign in with ChatGPT:
+
+```bash
+codex login
+codex login status
+```
+
+The extension discovers `codex` from `PATH`, `~/.local/bin`, `/opt/homebrew/bin`, and `/usr/local/bin`. Set `agModelMonitor.codexCliPath` when the executable lives elsewhere.
+
+Codex API-key-only auth does not expose ChatGPT subscription limits. Use ChatGPT login for the weekly quota card.
 
 ## Commands
 
-All commands can be invoked from the command palette (`Cmd+Shift+P` on macOS, `Ctrl+Shift+P` on Windows/Linux):
+All commands are available from the command palette:
 
 | Command | What it does |
-|---|---|
-| `Antigravity Model Monitor: Open Antigravity Model Monitor` | Open the premium management webview dashboard. |
-| `Antigravity Model Monitor: Refresh Antigravity Quota` | Instantly fetch the latest quota from the API. |
-| `Antigravity Model Monitor: Show Logs` | Open the extension's dedicated Output Channel. |
-| `Antigravity Model Monitor: Reset All Custom Names` | Instantly reset all custom renames and visibility states. |
+| --- | --- |
+| `AI Subscription Usage Monitor: Open AI Subscription Usage Monitor` | Opens the dashboard. |
+| `AI Subscription Usage Monitor: Refresh All Subscription Usage` | Refreshes all three sources. |
+| `AI Subscription Usage Monitor: Show Logs` | Opens the extension output channel. |
+| `AI Subscription Usage Monitor: Reset All Display Customizations` | Resets names, visibility, and ordering for all subscriptions and quota rows. |
 
----
+Antigravity diagnostic commands remain available for troubleshooting its local quota source.
 
 ## Settings
 
-Customize the extension's behavior in your VS Code settings under the `Antigravity Model Monitor` category:
+The internal `agModelMonitor` namespace is preserved for compatibility with existing installations.
 
 | Setting | Default | Description |
-|---|---|---|
-| `agModelMonitor.refreshIntervalSeconds` | `120` | Interval in seconds between automatic quota updates (10–3600s). |
-| `agModelMonitor.warningThreshold` | `30` | Percentage threshold below which the status bar and progress indicator turn yellow (5–80%). |
-| `agModelMonitor.criticalThreshold` | `10` | Percentage threshold below which the status bar and progress indicator turn red (1–50%). |
-| `agModelMonitor.notificationsEnabled` | `true` | Enable system toast alerts when any quota pool crosses a threshold. |
-| `agModelMonitor.showCreditsInStatusBar` | `true` | Display your remaining balance/credits in the status bar alongside the model metrics. |
-| `agModelMonitor.logLevel` | `"info"` | Logging verbosity for debugging (`"debug"`, `"info"`, `"warn"`, `"error"`). |
+| --- | ---: | --- |
+| `agModelMonitor.refreshIntervalSeconds` | `120` | Refresh interval for every source, from 10 to 3600 seconds. |
+| `agModelMonitor.warningThreshold` | `30` | Remaining percentage at which a limit becomes yellow. |
+| `agModelMonitor.criticalThreshold` | `10` | Remaining percentage at which a limit becomes red. |
+| `agModelMonitor.notificationsEnabled` | `true` | Notify when any visible limit crosses a threshold. |
+| `agModelMonitor.showCreditsInStatusBar` | `true` | Include Antigravity credits in the status bar. |
+| `agModelMonitor.codexCliPath` | `""` | Optional absolute path to the Codex CLI. |
+| `agModelMonitor.logLevel` | `"info"` | Output verbosity: `debug`, `info`, `warn`, or `error`. |
 
----
+## Privacy and credential handling
 
-## How Grouping Works
+- OAuth access tokens are read only when a refresh is performed.
+- Tokens are held in memory for the request and are never written or logged by this extension.
+- Claude Code credentials remain in Claude Code's own secure storage.
+- Codex credentials remain owned by Codex; the extension communicates with a short-lived local app-server process over stdio.
+- Each provider has an independent error boundary, so one signed-out CLI does not suppress the other usage cards.
 
-Antigravity's quota-summary endpoint returns the same groups and buckets shown by its built-in dashboard: `Gemini Models` and `Claude and GPT models`, each with an independent `Weekly Limit` and `Five Hour Limit`.
-
-Each limit uses the server-reported remaining fraction and reset timestamp directly. For example, `0.9070316` is displayed as `91%` remaining, and the reset timestamp is shown as both a relative duration and local date/time. The family minimum still drives alert colors and notifications.
-
-On older Antigravity builds where `RetrieveUserQuotaSummary` is unavailable, the extension falls back to model-level `GetUserStatus` quota data. That legacy response exposes only the currently-binding window, so the extension displays one truthful limit rather than duplicating a value into fabricated 5-hour and weekly rows.
-
----
-
-## Building from Source
+## Building from source
 
 ```bash
 npm install
-npm run build       # → compiles out/extension.js (+ compiles webview media assets)
-npm test            # → runs Jest unit tests
-npm run package     # → builds a .vsix package via @vscode/vsce
+npm run build
+npm test
+npm run lint
+npm run package
 ```
 
-To debug, open this repository in Antigravity (or VS Code), press **F5** to launch an Extension Development Host, and view the *Antigravity Model Monitor* output channel.
+Press **F5** from Antigravity or VS Code to launch an Extension Development Host. Logs appear in the **AI Subscription Usage Monitor** output channel.
 
----
+## Project layout
 
-## Project Layout
-
-```
+```text
 src/
-├── extension.ts            Activation, commands register, config wiring
-├── log.ts                  Dedicated output-channel logger
-├── auth/
-│   ├── antigravityPaths.ts Resolves path to editor state.vscdb
-│   ├── protobuf.ts         Wire-format reader for userStatus protobuf
-│   ├── tokenReader.ts      Reads refresh_token from state.vscdb using sql.js
-│   └── oauthRefresher.ts   Exchanges refresh_token for access_token
-├── api/
-│   ├── localLanguageServerClient.ts  Reads quota summary, with GetUserStatus as a legacy fallback
-│   └── cloudCodeClient.ts  Remote fallback API (fetchAvailableModels) + account credits
-├── quota/
-│   ├── grouping.ts         Maps authoritative 5-hour/weekly buckets (or legacy model quota) into families
-│   └── refreshManager.ts   Main timer loop, state, and refresh triggers
-├── state/
-│   └── customNames.ts      Renaming/hiding state persistence (globalState)
-├── statusBar/
-│   └── statusBar.ts        Dynamic status-bar updates & toast notifications
-└── webview/
-    ├── panel.ts            WebviewPanel lifecycle manager & event bridge
-    └── media/              Premium assets (HTML / CSS / Javascript)
+├── extension.ts
+├── api/                         Antigravity local/cloud clients
+├── auth/                        Antigravity auth and account parsing
+├── quota/                       Refresh orchestration and Antigravity grouping
+├── subscriptions/
+│   ├── claudeCode.ts            Claude credential lookup + 5h/weekly usage
+│   ├── codex.ts                 Codex app-server client + weekly parsing
+│   ├── cliExecutable.ts         GUI-safe CLI discovery
+│   ├── presentation.ts          Unified subscription/content presentation model
+│   └── types.ts                 Shared subscription usage model
+├── state/                       Subscription/content customization and ordering
+├── statusBar/                   Combined status and notifications
+└── webview/                     Multi-subscription dashboard
 ```
-
-The design document lives at [`docs/superpowers/specs/2026-05-25-antigravity-model-monitor-design.md`](docs/superpowers/specs/2026-05-25-antigravity-model-monitor-design.md).
-
----
 
 ## License
 

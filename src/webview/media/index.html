@@ -5,15 +5,16 @@
   <meta charset="UTF-8" />
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'none'; style-src {{cspSource}}; script-src 'nonce-{{nonce}}'; img-src {{cspSource}} data:;" />
-  <title>Antigravity Model Monitor</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI Subscription Usage Monitor</title>
   <link rel="stylesheet" href="{{cssUri}}" />
 </head>
 
 <body>
-
   <header class="app-header">
     <div class="header-title">
-      <h1>Antigravity Model Monitor</h1>
+      <p class="eyebrow">LOCAL USAGE OVERVIEW</p>
+      <h1>AI Subscription Usage</h1>
       <p class="subtitle" id="subtitle">Loading…</p>
     </div>
     <div class="header-actions">
@@ -23,43 +24,27 @@
           step="10" aria-label="Refresh interval in seconds" />
         <span>s</span>
       </label>
-      <button id="refresh-btn" type="button">Refresh</button>
+      <button id="refresh-btn" type="button" class="button-primary">Refresh all</button>
     </div>
   </header>
 
   <main class="dashboard-shell">
-    <section class="plan-card" id="plan-card" hidden>
-      <div class="plan-card-header">
-        <h2>Plan Details</h2>
-        <div class="plan-card-header-actions">
-          <button class="btn-subtle btn-toggle-data" id="toggle-data-btn" type="button">Hide Data</button>
-          <span class="plan-badge" id="plan-badge-name">GOOGLE AI PRO</span>
+    <section class="section-block">
+      <div class="section-heading">
+        <div>
+          <p class="section-kicker">SUBSCRIPTIONS</p>
+          <h2>Usage sources</h2>
         </div>
+        <p>Drag subscriptions and quota rows to control status-bar order. Every name and visibility switch is saved.</p>
       </div>
-
-      <div class="plan-grid is-collapsed" id="plan-grid">
-        <!-- Grid items will be rendered dynamically by JS -->
-      </div>
-
-      <div class="plan-upgrade-banner" id="plan-upgrade-banner" hidden>
-        <span id="upgrade-message">You can upgrade to a Google AI Ultra plan to receive the highest rate limits.</span>
-        <a class="upgrade-link" id="upgrade-link" href="#" target="_blank">Upgrade Now</a>
-      </div>
-
-      <div class="plan-card-footer">
-        <button class="btn-expand" id="toggle-expand-btn" type="button">
-          Show More <span class="arrow">▼</span>
-        </button>
+      <div class="subscription-stack" id="subscriptions">
+        <div class="empty">Waiting for subscription usage…</div>
       </div>
     </section>
-
-    <div id="content">
-      <div class="empty" id="empty">Waiting for quota data…</div>
-    </div>
   </main>
 
   <footer class="app-footer">
-    <button id="reset-all" type="button" class="link-button">Reset all custom names</button>
+    <button id="reset-all" type="button" class="link-button">Reset all subscription customizations</button>
   </footer>
 
   <script nonce="{{nonce}}" src="{{jsUri}}"></script>

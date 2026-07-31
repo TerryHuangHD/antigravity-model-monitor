@@ -3,27 +3,29 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { QuotaUpdate, RefreshManager } from '../quota/refreshManager';
 import { CustomNamesStore } from '../state/customNames';
-import { FamilyGroup } from '../quota/grouping';
 import { log } from '../log';
+import { buildMonitorSubscriptions, MonitorSubscription } from '../subscriptions/presentation';
 
 import { readStateValueByKey } from '../auth/tokenReader';
-import { parseUserStatusProto, PlanDetailsView } from '../auth/userStatusParser';
+import { parseUserStatusProto } from '../auth/userStatusParser';
 
 const VIEW_TYPE = 'antigravityModelMonitor';
 
 interface InboundMessage {
   type:
-    | 'renameGroup'
-    | 'renameModel'
-    | 'setGroupHidden'
-    | 'setModelHidden'
-    | 'setModelOrder'
+    | 'renameSubscription'
+    | 'renameContent'
+    | 'setSubscriptionHidden'
+    | 'setContentHidden'
+    | 'setSubscriptionOrder'
+    | 'setContentOrder'
     | 'resetAll'
     | 'refresh'
     | 'setRefreshInterval';
-  groupKey?: string;
-  modelId?: string;
-  modelIds?: string[];
+  subscriptionKey?: string;
+  subscriptionKeys?: string[];
+  contentId?: string;
+  contentIds?: string[];
   name?: string | null;
   hidden?: boolean;
   value?: number;
@@ -34,8 +36,8 @@ interface OutboundInit {
   payload: ViewState;
 }
 
-interface MemberView {
-  modelId: string;
+interface ContentView {
+  id: string;
   originalLabel: string;
   customName: string | null;
   hidden: boolean;
@@ -43,21 +45,23 @@ interface MemberView {
   resetTime: string | null;
 }
 
-interface GroupView {
+interface SubscriptionView {
   key: string;
-  autoName: string;
+  originalName: string;
   customName: string | null;
   hidden: boolean;
-  minRemainingPercent: number;
-  members: MemberView[];
+  description: string;
+  account: string | null;
+  source: string;
+  error: string | null;
+  lastUpdatedAt: string | null;
+  contents: ContentView[];
 }
 
 interface ViewState {
-  groups: GroupView[];
   lastUpdatedAt: string | null;
   isLoading: boolean;
-  error: string | null;
-  plan: PlanDetailsView | null;
+  subscriptions: SubscriptionView[];
   refreshInterval: number;
 }
 
@@ -79,7 +83,7 @@ export class ManagementPanel {
     const mediaRoot = vscode.Uri.file(path.join(this.context.extensionPath, 'out', 'webview', 'media'));
     this.panel = vscode.window.createWebviewPanel(
       VIEW_TYPE,
-      'Antigravity Model Monitor',
+      'AI Subscription Usage Monitor',
       vscode.ViewColumn.Active,
       {
         enableScripts: true,
@@ -110,21 +114,26 @@ export class ManagementPanel {
   private async onMessage(msg: InboundMessage) {
     log.debug(`[panel] received ${msg.type}`);
     switch (msg.type) {
-      case 'renameGroup':
-        if (msg.groupKey != null) await this.names.setGroupName(msg.groupKey, msg.name ?? null);
+      case 'renameSubscription':
+        if (msg.subscriptionKey != null) await this.names.setSubscriptionName(msg.subscriptionKey, msg.name ?? null);
         break;
-      case 'renameModel':
-        if (msg.modelId != null) await this.names.setModelName(msg.modelId, msg.name ?? null);
+      case 'renameContent':
+        if (msg.contentId != null) await this.names.setContentName(msg.contentId, msg.name ?? null);
         break;
-      case 'setGroupHidden':
-        if (msg.groupKey != null) await this.names.setGroupHidden(msg.groupKey, !!msg.hidden);
+      case 'setSubscriptionHidden':
+        if (msg.subscriptionKey != null) await this.names.setSubscriptionHidden(msg.subscriptionKey, !!msg.hidden);
         break;
-      case 'setModelHidden':
-        if (msg.modelId != null) await this.names.setModelHidden(msg.modelId, !!msg.hidden);
+      case 'setContentHidden':
+        if (msg.contentId != null) await this.names.setContentHidden(msg.contentId, !!msg.hidden);
         break;
-      case 'setModelOrder':
-        if (msg.groupKey != null && Array.isArray(msg.modelIds)) {
-          await this.names.setModelOrder(msg.groupKey, msg.modelIds);
+      case 'setSubscriptionOrder':
+        if (Array.isArray(msg.subscriptionKeys)) {
+          await this.names.setSubscriptionOrder(msg.subscriptionKeys);
+        }
+        break;
+      case 'setContentOrder':
+        if (msg.subscriptionKey != null && Array.isArray(msg.contentIds)) {
+          await this.names.setContentOrder(msg.subscriptionKey, msg.contentIds);
         }
         break;
       case 'resetAll':
@@ -143,27 +152,38 @@ export class ManagementPanel {
 
   private async postState(update: QuotaUpdate) {
     if (!this.panel) return;
-    let plan: PlanDetailsView | null = null;
+    let antigravityAccount: string | null = null;
+    let antigravityDescription: string | null = null;
     try {
       const raw = await readStateValueByKey('antigravityAuthStatus');
       if (raw) {
         const json = JSON.parse(raw);
-        plan = parseUserStatusProto(json.userStatusProtoBinaryBase64 || '');
-        if (!plan.email && json.email) plan.email = json.email;
-        if (!plan.name && json.name) plan.name = json.name;
+        const details = parseUserStatusProto(json.userStatusProtoBinaryBase64 || '');
+        antigravityAccount = details.email || json.email || details.name || json.name || null;
+        antigravityDescription = details.description || null;
       }
     } catch (err) {
-      log.error(`[panel] failed to read plan details: ${err}`);
+      log.error(`[panel] failed to read Antigravity account details: ${err}`);
     }
 
     const refreshInterval = vscode.workspace.getConfiguration('agModelMonitor').get<number>('refreshIntervalSeconds', 120);
 
+    const monitorSubscriptions = buildMonitorSubscriptions(
+      update.snapshot,
+      update.subscriptions,
+      this.names,
+      {
+        account: antigravityAccount,
+        description: antigravityDescription,
+        error: update.error?.message ?? null,
+        lastUpdatedAt: update.lastUpdatedAt
+      }
+    );
+
     const payload: ViewState = {
-      groups: (update.snapshot?.groups ?? []).map((g) => mapGroup(g, this.names)),
       lastUpdatedAt: update.lastUpdatedAt?.toISOString() ?? null,
       isLoading: update.isLoading,
-      error: update.error?.message ?? null,
-      plan,
+      subscriptions: monitorSubscriptions.map(mapSubscription),
       refreshInterval
     };
     const message: OutboundInit = { type: 'state', payload };
@@ -186,21 +206,24 @@ export class ManagementPanel {
   }
 }
 
-function mapGroup(g: FamilyGroup, names: CustomNamesStore): GroupView {
-  const snap = names.snapshot();
+function mapSubscription(subscription: MonitorSubscription): SubscriptionView {
   return {
-    key: g.key,
-    autoName: g.autoName,
-    customName: snap.groups[g.key] ?? null,
-    hidden: snap.hiddenGroups[g.key] === true,
-    minRemainingPercent: Math.round(g.minRemainingFraction * 100),
-    members: names.orderModels(g.key, g.members).map((m) => ({
-      modelId: m.modelId,
-      originalLabel: m.label,
-      customName: snap.models[m.modelId] ?? null,
-      hidden: snap.hiddenModels[m.modelId] === true,
-      remainingPercent: Math.round(m.remainingFraction * 100),
-      resetTime: m.resetTime ? m.resetTime.toISOString() : null
+    key: subscription.key,
+    originalName: subscription.originalName,
+    customName: subscription.customName,
+    hidden: subscription.hidden,
+    description: subscription.description,
+    account: subscription.account,
+    source: subscription.source,
+    error: subscription.error,
+    lastUpdatedAt: subscription.lastUpdatedAt?.toISOString() ?? null,
+    contents: subscription.contents.map((content) => ({
+      id: content.id,
+      originalLabel: content.originalLabel,
+      customName: content.customName,
+      hidden: content.hidden,
+      remainingPercent: Math.round(content.remainingFraction * 100),
+      resetTime: content.resetTime?.toISOString() ?? null
     }))
   };
 }

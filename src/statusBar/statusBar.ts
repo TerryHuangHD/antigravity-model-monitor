@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
-import { QuotaError, QuotaUpdate } from '../quota/refreshManager';
+import { QuotaUpdate } from '../quota/refreshManager';
 import { CustomNamesStore } from '../state/customNames';
-import { FamilyGroup, ModelEntry } from '../quota/grouping';
+import { buildMonitorSubscriptions, MonitorContent, MonitorSubscription } from '../subscriptions/presentation';
 
 export interface ThresholdConfig {
   warning: number;
@@ -10,11 +10,16 @@ export interface ThresholdConfig {
   showCredits?: boolean;
 }
 
+interface VisibleSubscription extends MonitorSubscription {
+  contents: MonitorContent[];
+}
+
 export class StatusBarController {
   private readonly item: vscode.StatusBarItem;
   private latest: QuotaUpdate = {
     snapshot: null,
     availableCredits: null,
+    subscriptions: [],
     error: null,
     lastUpdatedAt: null,
     isLoading: false
@@ -27,226 +32,223 @@ export class StatusBarController {
   ) {
     this.item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
     this.item.command = 'agModelMonitor.openPanel';
-    this.item.text = '$(sync~spin) AG Model Monitor';
-    this.item.tooltip = 'Antigravity Model Monitor — loading...';
+    this.item.text = '$(sync~spin) Subscription Usage';
+    this.item.tooltip = 'AI Subscription Usage Monitor — loading...';
     this.item.show();
   }
 
-  setThresholds(t: ThresholdConfig) {
-    this.thresholds = t;
+  setThresholds(thresholds: ThresholdConfig): void {
+    this.thresholds = thresholds;
     this.render();
   }
 
-  applyUpdate(update: QuotaUpdate) {
+  applyUpdate(update: QuotaUpdate): void {
     this.latest = update;
     this.maybeNotify(update);
     this.render();
   }
 
-  dispose() {
+  dispose(): void {
     this.item.dispose();
   }
 
-  render() {
-    const { latest, names, thresholds } = this;
+  render(): void {
+    const subscriptions = this.buildSubscriptions();
+    const visible = visibleSubscriptions(subscriptions);
+    const hasUsage = visible.some((subscription) => subscription.contents.length > 0);
 
-    if (latest.error && !latest.snapshot) {
-      this.item.text = `$(warning) AG Model Monitor`;
-      this.item.tooltip = buildErrorTooltip(latest.error);
-      this.item.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+    if (!hasUsage) {
+      if (this.latest.isLoading) {
+        this.item.text = '$(sync~spin) Subscription Usage';
+        this.item.tooltip = 'Reading local subscription usage…';
+        this.item.backgroundColor = undefined;
+        return;
+      }
+
+      const errors = collectErrors(visible);
+      this.item.text = errors.length > 0 ? '$(warning) Subscription Usage' : '$(eye-closed) Subscription Usage';
+      this.item.tooltip = errors.length > 0
+        ? buildErrorTooltip(errors)
+        : buildAllHiddenTooltip(this.latest.lastUpdatedAt);
+      this.item.backgroundColor = errors.length > 0
+        ? new vscode.ThemeColor('statusBarItem.warningBackground')
+        : undefined;
       return;
     }
 
-    const snapshot = latest.snapshot;
-    if (!snapshot || snapshot.groups.length === 0) {
-      this.item.text = latest.isLoading ? `$(sync~spin) AG Model Monitor` : `$(warning) AG Model Monitor`;
-      this.item.tooltip = snapshot ? 'No model quota data available.' : 'Loading…';
-      this.item.backgroundColor = snapshot ? new vscode.ThemeColor('statusBarItem.warningBackground') : undefined;
-      return;
-    }
+    this.item.text = formatStatusBarText(
+      visible,
+      this.latest.availableCredits,
+      this.thresholds
+    );
+    this.item.tooltip = buildTooltip(visible, this.thresholds, this.latest.lastUpdatedAt);
 
-    const visibleGroups = filterVisible(snapshot.groups, names);
-
-    if (visibleGroups.length === 0) {
-      // Everything hidden by the user — keep the bar visible but minimal.
-      this.item.text = '$(eye-closed) AG Model Monitor';
-      this.item.tooltip = buildAllHiddenTooltip(latest.lastUpdatedAt);
-      this.item.backgroundColor = undefined;
-      return;
-    }
-
-    this.item.text = formatStatusBarText(visibleGroups, latest.availableCredits, names, thresholds);
-    this.item.tooltip = buildTooltip(visibleGroups, names, thresholds, latest.lastUpdatedAt, latest.error);
-
-    const overallPct = Math.round(visibleGroups[0].effectiveMinFraction * 100);
-    this.item.backgroundColor = pickBackground(overallPct, thresholds);
+    const fractions = visible.flatMap((subscription) => subscription.contents.map((content) => content.remainingFraction));
+    const overallPercent = Math.round(Math.min(...fractions) * 100);
+    this.item.backgroundColor = pickBackground(overallPercent, this.thresholds);
   }
 
-  private maybeNotify(update: QuotaUpdate) {
-    if (!this.thresholds.notificationsEnabled || !update.snapshot) return;
-    for (const group of update.snapshot.groups) {
-      if (this.names.isGroupHidden(group.key)) continue;
-      const visibleMembers = group.members.filter((m) => !this.names.isModelHidden(m.modelId));
-      if (visibleMembers.length === 0) continue;
-      const minFraction = visibleMembers.reduce((m, e) => Math.min(m, e.remainingFraction), Infinity);
-      const pct = (Number.isFinite(minFraction) ? minFraction : 0) * 100;
-      const level: 'critical' | 'warning' | null =
-        pct <= this.thresholds.critical ? 'critical' :
-          pct <= this.thresholds.warning ? 'warning' :
-            null;
-      const previous = this.notify.get(group.key) ?? null;
-      this.notify.set(group.key, level);
-      if (level && previous !== level) {
-        const name = this.names.getGroupName(group.key, group.autoName);
-        const message = level === 'critical'
-          ? `Antigravity quota critical: ${name} at ${Math.round(pct)}% remaining.`
-          : `Antigravity quota low: ${name} at ${Math.round(pct)}% remaining.`;
-        if (level === 'critical') void vscode.window.showWarningMessage(message);
-        else void vscode.window.showInformationMessage(message);
+  private maybeNotify(update: QuotaUpdate): void {
+    if (!this.thresholds.notificationsEnabled) return;
+    for (const subscription of visibleSubscriptions(this.buildSubscriptions(update))) {
+      for (const content of subscription.contents) {
+        this.notifyIfCrossed(
+          `${subscription.key}:${content.id}`,
+          `${subscription.name} ${content.name}`,
+          content.remainingFraction
+        );
       }
     }
   }
-}
 
-// A FamilyGroup pruned to its visible members, with the recomputed min.
-interface VisibleGroup {
-  key: string;
-  autoName: string;
-  members: ModelEntry[];
-  effectiveMinFraction: number;
-}
+  private notifyIfCrossed(key: string, label: string, fraction: number): void {
+    const percent = fraction * 100;
+    const level: 'critical' | 'warning' | null =
+      percent <= this.thresholds.critical ? 'critical' :
+        percent <= this.thresholds.warning ? 'warning' :
+          null;
+    const previous = this.notify.get(key) ?? null;
+    this.notify.set(key, level);
+    if (!level || previous === level) return;
 
-function filterVisible(groups: FamilyGroup[], names: CustomNamesStore): VisibleGroup[] {
-  const out: VisibleGroup[] = [];
-  for (const g of groups) {
-    if (names.isGroupHidden(g.key)) continue;
-    const members = names.orderModels(g.key, g.members)
-      .filter((m) => !names.isModelHidden(m.modelId));
-    if (members.length === 0) continue;
-    const min = members.reduce((acc, m) => Math.min(acc, m.remainingFraction), Infinity);
-    out.push({
-      key: g.key,
-      autoName: g.autoName,
-      members,
-      effectiveMinFraction: Number.isFinite(min) ? min : 0
-    });
+    const message = level === 'critical'
+      ? `${label} is critical at ${Math.round(percent)}% remaining.`
+      : `${label} is low at ${Math.round(percent)}% remaining.`;
+    if (level === 'critical') void vscode.window.showWarningMessage(message);
+    else void vscode.window.showInformationMessage(message);
   }
-  out.sort((a, b) => a.effectiveMinFraction - b.effectiveMinFraction);
-  return out;
+
+  private buildSubscriptions(update: QuotaUpdate = this.latest): MonitorSubscription[] {
+    return buildMonitorSubscriptions(
+      update.snapshot,
+      update.subscriptions,
+      this.names,
+      {
+        account: null,
+        description: null,
+        error: update.error?.message ?? null,
+        lastUpdatedAt: update.lastUpdatedAt
+      }
+    );
+  }
+}
+
+function visibleSubscriptions(subscriptions: MonitorSubscription[]): VisibleSubscription[] {
+  return subscriptions
+    .filter((subscription) => !subscription.hidden)
+    .map((subscription) => ({
+      ...subscription,
+      contents: subscription.contents.filter((content) => !content.hidden)
+    }));
 }
 
 function formatStatusBarText(
-  groups: VisibleGroup[],
+  subscriptions: VisibleSubscription[],
   credits: number | null,
-  names: CustomNamesStore,
   thresholds: ThresholdConfig
 ): string {
   const parts: string[] = [];
-  if (thresholds.showCredits && credits != null) parts.push(`$(rocket) Credits: ${formatNumber(credits)}`);
-  for (const group of groups) {
-    for (const member of group.members) {
-      const pct = Math.round(member.remainingFraction * 100);
-      const dot = pickDot(pct, thresholds);
-      const groupName = names.getGroupName(group.key, group.autoName);
-      const memberName = names.getModelName(member.modelId, member.label);
-
-      let shortGroupName = groupName;
-      if (groupName === 'Gemini Models') shortGroupName = 'Gemini';
-      else if (groupName === 'Claude and GPT models') shortGroupName = 'Claude/GPT';
-
-      let shortLabel = memberName;
-      if (memberName === 'Five Hour Limit') shortLabel = '5h';
-      else if (memberName === 'Weekly Limit') shortLabel = '7d';
-
-      parts.push(`${dot} ${shortGroupName} ${shortLabel}: ${pct}%`);
+  for (const subscription of subscriptions) {
+    if (subscription.key === 'antigravity' && thresholds.showCredits && credits != null) {
+      parts.push(`$(rocket) ${subscription.name} Credits: ${formatNumber(credits)}`);
+    }
+    for (const content of subscription.contents) {
+      const percent = Math.round(content.remainingFraction * 100);
+      const label = content.customName ? content.name : shortContentName(content.name);
+      parts.push(`${pickDot(percent, thresholds)} ${subscription.name} ${label}: ${percent}%`);
     }
   }
   return parts.join('  ');
 }
 
-function pickDot(pct: number, t: ThresholdConfig): string {
-  if (pct <= t.critical) return '🔴';
-  if (pct <= t.warning) return '🟡';
-  return '🟢';
-}
-
-function pickBackground(pct: number, t: ThresholdConfig): vscode.ThemeColor | undefined {
-  if (pct <= t.critical) return new vscode.ThemeColor('statusBarItem.errorBackground');
-  if (pct <= t.warning) return new vscode.ThemeColor('statusBarItem.warningBackground');
-  return undefined;
-}
-
-function buildErrorTooltip(error: QuotaError): vscode.MarkdownString {
-  const md = new vscode.MarkdownString();
-  md.isTrusted = true;
-  md.appendMarkdown('### $(rocket) Antigravity Model Monitor\n\n');
-  md.appendMarkdown(`**Error:** ${escapeMd(error.message)}\n\n`);
-  md.appendMarkdown(`[Retry](command:agModelMonitor.refresh) · [Show logs](command:agModelMonitor.showLogs)`);
-  return md;
+function buildErrorTooltip(errors: string[]): vscode.MarkdownString {
+  const markdown = new vscode.MarkdownString();
+  markdown.isTrusted = true;
+  markdown.appendMarkdown('### $(pulse) AI Subscription Usage\n\n');
+  for (const error of errors) markdown.appendMarkdown(`- ${escapeMd(error)}\n`);
+  markdown.appendMarkdown('\n[Retry](command:agModelMonitor.refresh) · [Show logs](command:agModelMonitor.showLogs)');
+  return markdown;
 }
 
 function buildAllHiddenTooltip(lastUpdatedAt: Date | null): vscode.MarkdownString {
-  const md = new vscode.MarkdownString();
-  md.isTrusted = true;
-  md.supportThemeIcons = true;
-  md.appendMarkdown('### $(rocket) Antigravity Model Monitor\n\n');
-  md.appendMarkdown('_All families are hidden. Open the panel to show some._\n\n');
-  if (lastUpdatedAt) md.appendMarkdown(`_Updated ${formatRelative(lastUpdatedAt, true)}._\n\n`);
-  md.appendMarkdown('Click to open the management panel.');
-  return md;
+  const markdown = new vscode.MarkdownString();
+  markdown.isTrusted = true;
+  markdown.supportThemeIcons = true;
+  markdown.appendMarkdown('### $(pulse) AI Subscription Usage\n\n');
+  markdown.appendMarkdown('_No visible usage limits. Open the dashboard to review subscription and content visibility._\n\n');
+  if (lastUpdatedAt) markdown.appendMarkdown(`_Updated ${formatRelative(lastUpdatedAt, true)}._\n\n`);
+  markdown.appendMarkdown('Click to open the dashboard.');
+  return markdown;
 }
 
 function buildTooltip(
-  groups: VisibleGroup[],
-  names: CustomNamesStore,
+  subscriptions: VisibleSubscription[],
   thresholds: ThresholdConfig,
-  lastUpdatedAt: Date | null,
-  error: QuotaError | null
+  lastUpdatedAt: Date | null
 ): vscode.MarkdownString {
-  const md = new vscode.MarkdownString();
-  md.isTrusted = true;
-  md.supportThemeIcons = true;
-  md.appendMarkdown('### $(rocket) Antigravity Model Monitor\n\n');
+  const markdown = new vscode.MarkdownString();
+  markdown.isTrusted = true;
+  markdown.supportThemeIcons = true;
+  markdown.appendMarkdown('### $(pulse) AI Subscription Usage\n\n');
 
-  for (const [groupIndex, group] of groups.entries()) {
-    if (groupIndex > 0) md.appendMarkdown('---\n\n');
-
-    const groupName = names.getGroupName(group.key, group.autoName);
-    md.appendMarkdown(`#### ${escapeMd(groupName)}\n\n`);
-
-    for (const member of group.members /* already filtered to visible */) {
-      const label = names.getModelName(member.modelId, member.label);
-      const pct = member.remainingFraction * 100;
-      const dot = pickDot(pct, thresholds);
-      const displayLabel = formatTooltipLabel(label);
-      const pctText = formatPercent(pct);
-      const bar = renderBar(member.remainingFraction, 16);
-
-      md.appendMarkdown(`> ${dot} **${escapeMd(displayLabel)}** · **${pctText} remaining**  \n`);
-      md.appendMarkdown(`> \`${bar}\`  \n`);
-
-      if (member.resetTime) {
-        const reset = formatResetDetails(member.resetTime);
-        if (reset.available) {
-          md.appendMarkdown('> $(check) Available now\n\n');
-        } else {
-          md.appendMarkdown(`> $(clock) Resets in **${escapeMd(reset.relative)}** · \`${escapeMd(reset.absolute)}\`\n\n`);
-        }
-      } else {
-        md.appendMarkdown('> $(clock) Reset time unavailable\n\n');
-      }
+  for (const subscription of subscriptions) {
+    markdown.appendMarkdown(`#### ${escapeMd(subscription.name)}\n\n`);
+    if (subscription.account) markdown.appendMarkdown(`_${escapeMd(formatPlan(subscription.account))}_\n\n`);
+    for (const content of subscription.contents) appendContent(markdown, content, thresholds);
+    if (subscription.error) {
+      const prefix = subscription.contents.length > 0 ? 'Last refresh failed' : 'Unavailable';
+      markdown.appendMarkdown(`> ⚠️ ${prefix}: ${escapeMd(subscription.error)}\n\n`);
     }
   }
 
-  if (error) {
-    md.appendMarkdown(`> ⚠️ Last refresh failed: ${escapeMd(error.message)}\n\n`);
-  }
+  markdown.appendMarkdown('---\n\n');
+  const updatedAt = lastUpdatedAt ? `Updated ${formatRelative(lastUpdatedAt, true)}` : 'Refreshing sources…';
+  markdown.appendMarkdown(`_${escapeMd(updatedAt)}_\n\n`);
+  markdown.appendMarkdown('[$(dashboard) Open dashboard](command:agModelMonitor.openPanel) · [$(refresh) Refresh now](command:agModelMonitor.refresh)');
+  return markdown;
+}
 
-  md.appendMarkdown('---\n\n');
-  const updatedAt = lastUpdatedAt ? `Updated ${formatRelative(lastUpdatedAt, true)}` : 'Loading…';
-  md.appendMarkdown(`_${escapeMd(updatedAt)}_\n\n`);
-  md.appendMarkdown('[$(dashboard) Open dashboard](command:agModelMonitor.openPanel) · [$(refresh) Refresh now](command:agModelMonitor.refresh)');
-  return md;
+function appendContent(
+  markdown: vscode.MarkdownString,
+  content: MonitorContent,
+  thresholds: ThresholdConfig
+): void {
+  const percent = content.remainingFraction * 100;
+  const bar = renderBar(content.remainingFraction, 16);
+  markdown.appendMarkdown(`> ${pickDot(percent, thresholds)} **${escapeMd(formatTooltipLabel(content.name))}** · **${formatPercent(percent)} remaining**  \n`);
+  markdown.appendMarkdown(`> \`${bar}\`  \n`);
+  if (content.resetTime) {
+    const reset = formatResetDetails(content.resetTime);
+    markdown.appendMarkdown(reset.available
+      ? '> $(check) Available now\n\n'
+      : `> $(clock) Resets in **${escapeMd(reset.relative)}** · \`${escapeMd(reset.absolute)}\`\n\n`);
+  } else {
+    markdown.appendMarkdown('> $(clock) Reset time unavailable\n\n');
+  }
+}
+
+function collectErrors(subscriptions: VisibleSubscription[]): string[] {
+  return subscriptions
+    .filter((subscription) => subscription.error)
+    .map((subscription) => `${subscription.name}: ${subscription.error}`);
+}
+
+function shortContentName(name: string): string {
+  return name
+    .replace(/Five Hour Limit/gi, '5h')
+    .replace(/Weekly Limit/gi, '7d');
+}
+
+function pickDot(percent: number, thresholds: ThresholdConfig): string {
+  if (percent <= thresholds.critical) return '🔴';
+  if (percent <= thresholds.warning) return '🟡';
+  return '🟢';
+}
+
+function pickBackground(percent: number, thresholds: ThresholdConfig): vscode.ThemeColor | undefined {
+  if (percent <= thresholds.critical) return new vscode.ThemeColor('statusBarItem.errorBackground');
+  if (percent <= thresholds.warning) return new vscode.ThemeColor('statusBarItem.warningBackground');
+  return undefined;
 }
 
 function formatTooltipLabel(label: string): string {
@@ -261,58 +263,51 @@ function renderBar(fraction: number, width = 12): string {
   return '█'.repeat(full) + '░'.repeat(width - full);
 }
 
-function formatPercent(pct: number): string {
-  if (Number.isInteger(pct)) return `${pct}%`;
-  return `${pct.toFixed(2)}%`;
+function formatPercent(percent: number): string {
+  return Number.isInteger(percent) ? `${percent}%` : `${percent.toFixed(2)}%`;
 }
 
-function formatNumber(n: number): string {
-  return n.toLocaleString('en-US');
+function formatNumber(value: number): string {
+  return value.toLocaleString('en-US');
 }
 
-interface ResetDetails {
-  available: boolean;
-  relative: string;
-  absolute: string;
-}
-
-function formatResetDetails(resetTime: Date): ResetDetails {
+function formatResetDetails(resetTime: Date): { available: boolean; relative: string; absolute: string } {
   const diffMs = resetTime.getTime() - Date.now();
   if (diffMs <= 0) return { available: true, relative: '', absolute: '' };
-  const minutes = Math.floor(diffMs / 60000);
+  const minutes = Math.floor(diffMs / 60_000);
   const hours = Math.floor(minutes / 60);
   const days = Math.floor(hours / 24);
-
-  const month = resetTime.getMonth() + 1;
-  const date = resetTime.getDate();
-  const pad = (n: number) => n.toString().padStart(2, '0');
-  const hh = pad(resetTime.getHours());
-  const mm = pad(resetTime.getMinutes());
-  const absoluteStr = `${month}/${date} ${hh}:${mm}`;
-
-  let relativeStr = '';
-  if (days > 0) relativeStr = `${days}d ${hours % 24}h`;
-  else if (hours > 0) relativeStr = `${hours}h ${minutes % 60}m`;
-  else relativeStr = `${minutes}m`;
-
-  return { available: false, relative: relativeStr, absolute: absoluteStr };
+  const pad = (value: number) => value.toString().padStart(2, '0');
+  const absolute = `${resetTime.getMonth() + 1}/${resetTime.getDate()} ${pad(resetTime.getHours())}:${pad(resetTime.getMinutes())}`;
+  const relative = days > 0
+    ? `${days}d ${hours % 24}h`
+    : hours > 0
+      ? `${hours}h ${minutes % 60}m`
+      : `${minutes}m`;
+  return { available: false, relative, absolute };
 }
 
 function formatRelative(date: Date, past = false): string {
   const diffMs = date.getTime() - Date.now();
   const ago = past || diffMs <= 0;
-  const abs = Math.abs(diffMs);
-  const minutes = Math.floor(abs / 60000);
+  const absolute = Math.abs(diffMs);
+  const minutes = Math.floor(absolute / 60_000);
   const hours = Math.floor(minutes / 60);
   const days = Math.floor(hours / 24);
-  let label: string;
-  if (days > 0) label = `${days}d ${hours % 24}h`;
-  else if (hours > 0) label = `${hours}h ${minutes % 60}m`;
-  else if (minutes > 0) label = `${minutes}m`;
-  else label = `${Math.max(1, Math.floor(abs / 1000))}s`;
+  const label = days > 0
+    ? `${days}d ${hours % 24}h`
+    : hours > 0
+      ? `${hours}h ${minutes % 60}m`
+      : minutes > 0
+        ? `${minutes}m`
+        : `${Math.max(1, Math.floor(absolute / 1000))}s`;
   return ago ? `${label} ago` : `in ${label}`;
 }
 
-function escapeMd(s: string): string {
-  return s.replace(/[|<>*_`[\]\\]/g, (c) => `\\${c}`);
+function formatPlan(value: string): string {
+  return value.replace(/[-_]+/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function escapeMd(value: string): string {
+  return value.replace(/[|<>*_`[\]\\]/g, (character) => `\\${character}`);
 }

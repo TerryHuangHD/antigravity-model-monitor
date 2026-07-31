@@ -23,6 +23,7 @@ interface RuntimeConfig {
   notificationsEnabled: boolean;
   logLevel: Level;
   showCreditsInStatusBar: boolean;
+  codexCliPath: string;
 }
 
 function readConfig(): RuntimeConfig {
@@ -33,18 +34,19 @@ function readConfig(): RuntimeConfig {
     criticalThreshold: cfg.get<number>('criticalThreshold', 10),
     notificationsEnabled: cfg.get<boolean>('notificationsEnabled', true),
     logLevel: cfg.get<Level>('logLevel', 'info'),
-    showCreditsInStatusBar: cfg.get<boolean>('showCreditsInStatusBar', true)
+    showCreditsInStatusBar: cfg.get<boolean>('showCreditsInStatusBar', true),
+    codexCliPath: cfg.get<string>('codexCliPath', '')
   };
 }
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-  const channel = vscode.window.createOutputChannel('Antigravity Model Monitor');
+  const channel = vscode.window.createOutputChannel('AI Subscription Usage Monitor');
   context.subscriptions.push(channel);
   log.init(channel);
 
   const initialCfg = readConfig();
   log.setLevel(initialCfg.logLevel);
-  log.info('Antigravity Model Monitor activating...');
+  log.info('AI Subscription Usage Monitor activating...');
 
   const names = new CustomNamesStore(context.globalState);
   context.subscriptions.push({ dispose: () => names.dispose() });
@@ -59,7 +61,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
 
   const manager = new RefreshManager(oauth, {
-    intervalMs: Math.max(10, initialCfg.refreshIntervalSeconds) * 1000
+    intervalMs: Math.max(10, initialCfg.refreshIntervalSeconds) * 1000,
+    codexCliPath: initialCfg.codexCliPath || undefined
   });
   context.subscriptions.push({ dispose: () => manager.dispose() });
 
@@ -108,7 +111,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.commands.registerCommand('agModelMonitor.resetCustomNames', async () => {
       const choice = await vscode.window.showWarningMessage(
-        'Clear all custom names for Antigravity Model Monitor?',
+        'Clear all subscription names, visibility choices, and display order?',
         { modal: true },
         'Reset'
       );
@@ -204,6 +207,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const next = readConfig();
       log.setLevel(next.logLevel);
       manager.setIntervalMs(Math.max(10, next.refreshIntervalSeconds) * 1000);
+      manager.setCodexCliPath(next.codexCliPath || undefined);
       statusBar.setThresholds({
         warning: next.warningThreshold,
         critical: next.criticalThreshold,

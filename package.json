@@ -1,8 +1,8 @@
 {
   "name": "antigravity-model-monitor",
-  "displayName": "Antigravity Model Monitor",
-  "description": "Status-bar monitor for Antigravity AI model quotas. Click to manage model and group display names.",
-  "version": "0.4.0",
+  "displayName": "AI Subscription Usage Monitor",
+  "description": "Monitor Antigravity, Claude Code, and Codex subscription usage from one VS Code status bar.",
+  "version": "0.6.0",
   "publisher": "terryhuanghd",
   "repository": {
     "type": "git",
@@ -16,6 +16,9 @@
   ],
   "keywords": [
     "antigravity",
+    "claude-code",
+    "codex",
+    "subscription",
     "ai",
     "quota",
     "monitor",
@@ -33,42 +36,42 @@
     "commands": [
       {
         "command": "agModelMonitor.openPanel",
-        "title": "Open Antigravity Model Monitor",
-        "category": "Antigravity Model Monitor"
+        "title": "Open AI Subscription Usage Monitor",
+        "category": "AI Subscription Usage Monitor"
       },
       {
         "command": "agModelMonitor.refresh",
-        "title": "Refresh Antigravity Quota",
-        "category": "Antigravity Model Monitor"
+        "title": "Refresh All Subscription Usage",
+        "category": "AI Subscription Usage Monitor"
       },
       {
         "command": "agModelMonitor.showLogs",
         "title": "Show Logs",
-        "category": "Antigravity Model Monitor"
+        "category": "AI Subscription Usage Monitor"
       },
       {
         "command": "agModelMonitor.diagnoseLocalQuota",
         "title": "Diagnose Local Quota Source (debug)",
-        "category": "Antigravity Model Monitor"
+        "category": "AI Subscription Usage Monitor"
       },
       {
         "command": "agModelMonitor.resetCustomNames",
-        "title": "Reset All Custom Names",
-        "category": "Antigravity Model Monitor"
+        "title": "Reset All Display Customizations",
+        "category": "AI Subscription Usage Monitor"
       },
       {
         "command": "agModelMonitor.dumpStateKeys",
         "title": "Dump State DB Keys (debug)",
-        "category": "Antigravity Model Monitor"
+        "category": "AI Subscription Usage Monitor"
       },
       {
         "command": "agModelMonitor.dumpKeyValue",
         "title": "Inspect State DB Key Value (debug)",
-        "category": "Antigravity Model Monitor"
+        "category": "AI Subscription Usage Monitor"
       }
     ],
     "configuration": {
-      "title": "Antigravity Model Monitor",
+      "title": "AI Subscription Usage Monitor",
       "properties": {
         "agModelMonitor.refreshIntervalSeconds": {
           "type": "number",
@@ -110,7 +113,12 @@
         "agModelMonitor.showCreditsInStatusBar": {
           "type": "boolean",
           "default": true,
-          "description": "Show available credits in the status bar."
+          "description": "Show Antigravity available credits in the status bar."
+        },
+        "agModelMonitor.codexCliPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional absolute path to the Codex CLI. Leave empty to discover codex from PATH and common install locations."
         }
       }
     }
