@@ -8,8 +8,8 @@ import {
 import { describeProtobuf, extractPrintableStrings } from './auth/inspect';
 import { OAuthRefresher } from './auth/oauthRefresher';
 import { RefreshManager } from './quota/refreshManager';
-import { fetchLocalLanguageServerModels } from './api/localLanguageServerClient';
-import { groupByFamily } from './quota/grouping';
+import { fetchLocalLanguageServerModels, fetchLocalQuotaSummaryGroups } from './api/localLanguageServerClient';
+import { groupByFamily, parseQuotaSummary } from './quota/grouping';
 import { CustomNamesStore } from './state/customNames';
 import { StatusBarController, ThresholdConfig } from './statusBar/statusBar';
 import { ManagementPanel } from './webview/panel';
@@ -85,12 +85,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('agModelMonitor.diagnoseLocalQuota', async () => {
       log.show();
       try {
-        const entries = await fetchLocalLanguageServerModels();
-        const groups = groupByFamily(entries);
+        let groups: ReturnType<typeof groupByFamily>;
+        let source: string;
+        try {
+          const summaryGroups = await fetchLocalQuotaSummaryGroups();
+          groups = parseQuotaSummary(summaryGroups).groups;
+          source = 'quota summary';
+        } catch (summaryError) {
+          log.warn(`[diagnose-local-quota] quota summary unavailable: ${summaryError instanceof Error ? summaryError.message : String(summaryError)}`);
+          const entries = await fetchLocalLanguageServerModels();
+          groups = groupByFamily(entries);
+          source = 'legacy model quota';
+        }
         const summary = summarizeGroupsForLog(groups);
-        log.info(`[diagnose-local-quota] loaded ${entries.length} local quota models`);
-        log.info(`[diagnose-local-quota] ${summary}`);
-        void vscode.window.showInformationMessage(`Local quota source OK: ${summary}`);
+        log.info(`[diagnose-local-quota] ${source}: ${summary}`);
+        void vscode.window.showInformationMessage(`Local ${source} OK: ${summary}`);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         log.error(`[diagnose-local-quota] failed: ${message}`);

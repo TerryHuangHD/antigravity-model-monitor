@@ -1,4 +1,4 @@
-import { parseSnapshot, groupByFamily, ModelEntry } from './grouping';
+import { parseSnapshot, groupByFamily, ModelEntry, parseQuotaSummary } from './grouping';
 
 // Fixed reference time so reset-window classification is deterministic.
 const NOW = new Date('2026-06-24T10:00:00.000Z').getTime();
@@ -127,6 +127,94 @@ describe('parseSnapshot', () => {
 
     expect(r.groups).toHaveLength(1);
     expect(r.groups[0].key).toBe('claude-gpt');
+  });
+});
+
+describe('parseQuotaSummary', () => {
+  it('keeps the authoritative weekly and five-hour buckets as separate limits', () => {
+    const result = parseQuotaSummary([
+      {
+        displayName: 'Gemini Models',
+        description: 'Models within this group: Gemini Flash, Gemini Pro',
+        buckets: [
+          {
+            bucketId: 'gemini-weekly',
+            displayName: 'Weekly Limit',
+            description: 'Weekly quota',
+            window: 'weekly',
+            remainingFraction: 0.9070316,
+            resetTime: new Date('2026-08-05T01:04:46Z')
+          },
+          {
+            bucketId: 'gemini-5h',
+            displayName: 'Five Hour Limit',
+            description: 'Five-hour quota',
+            window: '5h',
+            remainingFraction: 0.9778624,
+            resetTime: new Date('2026-07-31T19:59:25Z')
+          }
+        ]
+      },
+      {
+        displayName: 'Claude and GPT models',
+        description: null,
+        buckets: [
+          {
+            bucketId: '3p-weekly',
+            displayName: 'Weekly Limit',
+            description: null,
+            window: 'weekly',
+            remainingFraction: 1,
+            resetTime: new Date('2026-08-07T15:59:12Z')
+          },
+          {
+            bucketId: '3p-5h',
+            displayName: 'Five Hour Limit',
+            description: null,
+            window: '5h',
+            remainingFraction: 1,
+            resetTime: new Date('2026-07-31T20:59:12Z')
+          }
+        ]
+      }
+    ]);
+
+    expect(result.totalModelCount).toBe(4);
+    expect(result.groups.map((group) => group.key)).toEqual(['gemini', 'claude-gpt']);
+
+    const gemini = result.groups[0];
+    expect(gemini.minRemainingFraction).toBe(0.9070316);
+    expect(gemini.members).toEqual([
+      {
+        modelId: 'gemini-weekly',
+        label: 'Weekly Limit',
+        remainingFraction: 0.9070316,
+        resetTime: new Date('2026-08-05T01:04:46Z')
+      },
+      {
+        modelId: 'gemini-5h',
+        label: 'Five Hour Limit',
+        remainingFraction: 0.9778624,
+        resetTime: new Date('2026-07-31T19:59:25Z')
+      }
+    ]);
+  });
+
+  it('derives a stable key for an unknown summary group', () => {
+    const result = parseQuotaSummary([{
+      displayName: 'Experimental Models',
+      description: null,
+      buckets: [{
+        bucketId: 'experimental-weekly',
+        displayName: 'Weekly Limit',
+        description: null,
+        window: 'weekly',
+        remainingFraction: 0.75,
+        resetTime: null
+      }]
+    }]);
+
+    expect(result.groups[0].key).toBe('experimental-models');
   });
 });
 

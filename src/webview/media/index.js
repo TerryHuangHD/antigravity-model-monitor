@@ -268,19 +268,20 @@
   }
 
   function formatReset(iso) {
-    const target = new Date(iso).getTime();
+    const resetDate = new Date(iso);
+    const target = resetDate.getTime();
     if (!Number.isFinite(target)) return iso;
     const diffMs = target - Date.now();
     if (diffMs <= 0) return 'available';
     const minutes = Math.floor(diffMs / 60000);
     const hours = Math.floor(minutes / 60);
     const days = Math.floor(hours / 24);
-    const hhmm = `${pad(hours % 24)}:${pad(minutes % 60)}`;
+    const absolute = `${resetDate.getMonth() + 1}/${resetDate.getDate()} ${pad(resetDate.getHours())}:${pad(resetDate.getMinutes())}`;
     let prefix;
     if (days > 0) prefix = `${days}d ${hours % 24}h`;
     else if (hours > 0) prefix = `${hours}h ${minutes % 60}m`;
     else prefix = `${minutes}m`;
-    return `${prefix} (${hhmm})`;
+    return `${prefix} (${absolute})`;
   }
 
   function pad(n) { return n < 10 ? `0${n}` : `${n}`; }

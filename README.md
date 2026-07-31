@@ -25,7 +25,7 @@ A small VS Code extension for the [Antigravity](https://antigravity.google) AI e
 
 ## Requirements
 
-This extension runs **inside the Antigravity editor itself**. It reads quota primarily from Antigravity's **local language server** — the same `GetUserStatus` endpoint that powers the built-in quota dashboard. For account credits, and as a fallback when the local server is unavailable, it also reads your signed-in OAuth refresh token from the editor's database (`state.vscdb`), exchanges it via Google's OAuth endpoint, and calls Antigravity's remote quota API.
+This extension runs **inside the Antigravity editor itself**. It reads quota primarily from Antigravity's **local language server** — using the same `RetrieveUserQuotaSummary` data that powers the built-in quota dashboard. For account credits, and as a fallback when the local server is unavailable, it also reads your signed-in OAuth refresh token from the editor's database (`state.vscdb`), exchanges it via Google's OAuth endpoint, and calls Antigravity's remote quota API.
 
 If the extension cannot reach either source, it displays a status-bar warning and provides troubleshooting guidance in its output channel logs.
 
@@ -61,11 +61,11 @@ Customize the extension's behavior in your VS Code settings under the `Antigravi
 
 ## How Grouping Works
 
-Antigravity returns one quota entry per model — a remaining percentage and a reset time — and its built-in dashboard rolls those rows up into two cards: `Gemini Models` and `Claude and GPT models`. This extension uses the same two cards.
+Antigravity's quota-summary endpoint returns the same groups and buckets shown by its built-in dashboard: `Gemini Models` and `Claude and GPT models`, each with an independent `Weekly Limit` and `Five Hour Limit`.
 
-Each card shows a single limit: the **lowest remaining percentage** among that family's models — the most conservative, currently-binding constraint. That limit is labeled from its reset window: `Five Hour Limit` when the reset is within six hours, `Weekly Limit` when it is days away (and `Quota` if no reset time is reported).
+Each limit uses the server-reported remaining fraction and reset timestamp directly. For example, `0.9070316` is displayed as `91%` remaining, and the reset timestamp is shown as both a relative duration and local date/time. The family minimum still drives alert colors and notifications.
 
-Antigravity's quota API only reports the **currently-binding** window per model — whichever limit you are closest to hitting — so only one of the two limits is observable at a time. While the short-term cap is the tighter constraint you'll see `Five Hour Limit`; once the weekly cap binds it switches to `Weekly Limit`. The built-in dashboard can show both at once because it pulls additional data this extension does not have access to.
+On older Antigravity builds where `RetrieveUserQuotaSummary` is unavailable, the extension falls back to model-level `GetUserStatus` quota data. That legacy response exposes only the currently-binding window, so the extension displays one truthful limit rather than duplicating a value into fabricated 5-hour and weekly rows.
 
 ---
 
@@ -94,10 +94,10 @@ src/
 │   ├── tokenReader.ts      Reads refresh_token from state.vscdb using sql.js
 │   └── oauthRefresher.ts   Exchanges refresh_token for access_token
 ├── api/
-│   ├── localLanguageServerClient.ts  Primary source: reads GetUserStatus from the local server
+│   ├── localLanguageServerClient.ts  Reads quota summary, with GetUserStatus as a legacy fallback
 │   └── cloudCodeClient.ts  Remote fallback API (fetchAvailableModels) + account credits
 ├── quota/
-│   ├── grouping.ts         Resolves raw model quota into one per-family limit (labeled by reset window)
+│   ├── grouping.ts         Maps authoritative 5-hour/weekly buckets (or legacy model quota) into families
 │   └── refreshManager.ts   Main timer loop, state, and refresh triggers
 ├── state/
 │   └── customNames.ts      Renaming/hiding state persistence (globalState)

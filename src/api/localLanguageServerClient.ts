@@ -3,16 +3,21 @@ import * as http from 'http';
 import * as https from 'https';
 import { promisify } from 'util';
 import { log } from '../log';
-import { ModelEntry } from '../quota/grouping';
+import { ModelEntry, QuotaSummaryBucket, QuotaSummaryGroup } from '../quota/grouping';
 
 const execFileAsync = promisify(execFile);
 const GET_USER_STATUS_PATH = '/exa.language_server_pb.LanguageServerService/GetUserStatus';
+const RETRIEVE_USER_QUOTA_SUMMARY_PATH = '/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary';
 const GET_USER_STATUS_BODY = {
   metadata: {
     ideName: 'antigravity',
     extensionName: 'antigravity',
     locale: 'en'
   }
+};
+const RETRIEVE_USER_QUOTA_SUMMARY_BODY = {
+  request: {},
+  forceRefresh: true
 };
 
 interface LanguageServerProcess {
@@ -66,10 +71,69 @@ interface LocalUserStatus {
   cascade_model_config_data?: { client_model_configs?: LocalQuotaModel[] };
 }
 
+interface LocalQuotaSummaryBucket {
+  bucketId?: string;
+  bucket_id?: string;
+  displayName?: string;
+  display_name?: string;
+  description?: string;
+  window?: string;
+  remainingFraction?: number;
+  remaining_fraction?: number;
+  disabled?: boolean;
+  resetTime?: TimestampLike;
+  reset_time?: TimestampLike;
+}
+
+interface LocalQuotaSummaryGroup {
+  displayName?: string;
+  display_name?: string;
+  description?: string;
+  buckets?: LocalQuotaSummaryBucket[];
+}
+
+interface LocalQuotaSummaryPayload {
+  groups?: LocalQuotaSummaryGroup[];
+  buckets?: LocalQuotaSummaryBucket[];
+  description?: string;
+}
+
+interface LocalQuotaSummaryResponse extends LocalQuotaSummaryPayload {
+  response?: LocalQuotaSummaryPayload;
+}
+
 export class LocalLanguageServerError extends Error {
   constructor(message: string, readonly responseReceived = false) {
     super(message);
   }
+}
+
+export async function fetchLocalQuotaSummaryGroups(): Promise<QuotaSummaryGroup[]> {
+  const candidates = await findLanguageServerProcesses();
+  if (candidates.length === 0) throw new LocalLanguageServerError('Antigravity language server process was not found');
+
+  let lastError: unknown;
+  for (const candidate of candidates) {
+    try {
+      const data = await postLocalJson<LocalQuotaSummaryResponse>(
+        candidate,
+        RETRIEVE_USER_QUOTA_SUMMARY_PATH,
+        RETRIEVE_USER_QUOTA_SUMMARY_BODY
+      );
+      const groups = extractQuotaSummaryGroups(data);
+      if (groups.length > 0) {
+        const bucketCount = groups.reduce((count, group) => count + group.buckets.length, 0);
+        log.info(`[local-ls] loaded ${bucketCount} quota-summary buckets in ${groups.length} groups from pid=${candidate.pid} port=${candidate.port}`);
+        return groups;
+      }
+      lastError = new LocalLanguageServerError('RetrieveUserQuotaSummary returned no usable quota buckets');
+    } catch (err) {
+      lastError = err;
+      log.debug(`[local-ls] quota summary pid=${candidate.pid} port=${candidate.port} skipped: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new LocalLanguageServerError(String(lastError));
 }
 
 export async function fetchLocalLanguageServerModels(): Promise<ModelEntry[]> {
@@ -127,6 +191,58 @@ export function extractQuotaEntries(data: LocalUserStatusResponse): ModelEntry[]
     });
   }
   return entries;
+}
+
+export function extractQuotaSummaryGroups(data: LocalQuotaSummaryResponse): QuotaSummaryGroup[] {
+  const payload = data.response ?? data;
+  const groups: QuotaSummaryGroup[] = [];
+
+  for (const group of payload.groups ?? []) {
+    const buckets = extractQuotaSummaryBuckets(group.buckets ?? []);
+    if (buckets.length === 0) continue;
+    groups.push({
+      displayName: (group.displayName ?? group.display_name ?? '').trim(),
+      description: cleanOptionalText(group.description),
+      buckets
+    });
+  }
+
+  // The schema also permits ungrouped buckets. Preserve them rather than
+  // silently dropping valid quota data on accounts using that response shape.
+  const topLevelBuckets = extractQuotaSummaryBuckets(payload.buckets ?? []);
+  if (topLevelBuckets.length > 0) {
+    groups.push({
+      displayName: 'Model Quotas',
+      description: cleanOptionalText(payload.description),
+      buckets: topLevelBuckets
+    });
+  }
+
+  return groups;
+}
+
+function extractQuotaSummaryBuckets(rawBuckets: LocalQuotaSummaryBucket[]): QuotaSummaryBucket[] {
+  const buckets: QuotaSummaryBucket[] = [];
+  for (const bucket of rawBuckets) {
+    if (!bucket || bucket.disabled) continue;
+    const remainingFraction = bucket.remainingFraction ?? bucket.remaining_fraction;
+    if (typeof remainingFraction !== 'number' || remainingFraction < 0 || remainingFraction > 1) continue;
+
+    buckets.push({
+      bucketId: (bucket.bucketId ?? bucket.bucket_id ?? '').trim(),
+      displayName: (bucket.displayName ?? bucket.display_name ?? '').trim(),
+      description: cleanOptionalText(bucket.description),
+      window: cleanOptionalText(bucket.window),
+      remainingFraction,
+      resetTime: parseResetTime(bucket.resetTime ?? bucket.reset_time)
+    });
+  }
+  return buckets;
+}
+
+function cleanOptionalText(value: string | undefined): string | null {
+  const text = value?.trim() ?? '';
+  return text || null;
 }
 
 function parseResetTime(raw: TimestampLike | undefined): Date | null {
@@ -209,7 +325,14 @@ function isAntigravityLanguageServerArgs(args: string[]): boolean {
   const appDataDir = getArgValue(args, '--app_data_dir');
   if (appDataDir) {
     const normalized = appDataDir.replace(/\\/g, '/').toLowerCase();
-    if (normalized === 'antigravity' || normalized.endsWith('/antigravity') || normalized.includes('/antigravity/')) {
+    if (
+      normalized === 'antigravity'
+      || normalized === 'antigravity-ide'
+      || normalized.endsWith('/antigravity')
+      || normalized.endsWith('/antigravity-ide')
+      || normalized.includes('/antigravity/')
+      || normalized.includes('/antigravity-ide/')
+    ) {
       return true;
     }
   }

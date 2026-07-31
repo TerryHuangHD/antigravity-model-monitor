@@ -7,6 +7,21 @@ export interface ModelEntry {
   resetTime: Date | null;
 }
 
+export interface QuotaSummaryBucket {
+  bucketId: string;
+  displayName: string;
+  description: string | null;
+  window: string | null;
+  remainingFraction: number;
+  resetTime: Date | null;
+}
+
+export interface QuotaSummaryGroup {
+  displayName: string;
+  description: string | null;
+  buckets: QuotaSummaryBucket[];
+}
+
 export interface FamilyGroup {
   key: string;            // stable identifier (e.g. "claude", "gemini")
   autoName: string;       // capitalized display (e.g. "Claude", "Gemini")
@@ -36,6 +51,18 @@ function detectFamily(entry: ModelEntry): { key: string; display: string } {
     if (rule.pattern.test(haystack)) return { key: rule.key, display: rule.display };
   }
   return { key: 'claude-gpt', display: 'Claude and GPT models' };
+}
+
+function detectSummaryFamily(group: QuotaSummaryGroup, index: number): { key: string; display: string } {
+  const display = group.displayName.trim();
+  const haystack = `${display} ${group.buckets.map((bucket) => bucket.bucketId).join(' ')}`.toLowerCase();
+  if (/\bgemini\b/.test(haystack)) return { key: 'gemini', display: display || 'Gemini Models' };
+  if (/\bclaude\b|\bgpt\b|\b3p(?:-|\b)/.test(haystack)) {
+    return { key: 'claude-gpt', display: display || 'Claude and GPT models' };
+  }
+
+  const slug = display.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return { key: slug || `quota-group-${index + 1}`, display: display || `Quota Group ${index + 1}` };
 }
 
 // Antigravity's local language server (GetUserStatus) reports a single quota window
@@ -93,6 +120,44 @@ export function parseSnapshot(response: FetchAvailableModelsResponse, now: numbe
   }
 
   return { groups: groupByFamily(entries, now), totalModelCount: entries.length };
+}
+
+/**
+ * Converts Antigravity's authoritative quota-summary buckets into the same view
+ * model used by the status bar and panel. Unlike model-level quotaInfo, this
+ * endpoint exposes the five-hour and weekly windows independently.
+ */
+export function parseQuotaSummary(summaryGroups: QuotaSummaryGroup[]): ParsedSnapshot {
+  const groups: FamilyGroup[] = [];
+  let totalLimitCount = 0;
+
+  for (let index = 0; index < summaryGroups.length; index++) {
+    const summaryGroup = summaryGroups[index];
+    if (summaryGroup.buckets.length === 0) continue;
+
+    const family = detectSummaryFamily(summaryGroup, index);
+    const members = summaryGroup.buckets.map((bucket, bucketIndex): ModelEntry => ({
+      modelId: bucket.bucketId || `${family.key}-${bucket.window || bucketIndex + 1}`,
+      label: bucket.displayName || bucket.window || 'Quota',
+      remainingFraction: bucket.remainingFraction,
+      resetTime: bucket.resetTime
+    }));
+    const minRemainingFraction = members.reduce(
+      (lowest, member) => Math.min(lowest, member.remainingFraction),
+      1
+    );
+
+    totalLimitCount += members.length;
+    groups.push({
+      key: family.key,
+      autoName: family.display,
+      members,
+      minRemainingFraction
+    });
+  }
+
+  groups.sort((a, b) => a.minRemainingFraction - b.minRemainingFraction);
+  return { groups, totalModelCount: totalLimitCount };
 }
 
 export function groupByFamily(entries: ModelEntry[], now: number = Date.now()): FamilyGroup[] {

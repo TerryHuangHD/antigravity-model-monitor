@@ -8,10 +8,10 @@ import {
 } from '../api/cloudCodeClient';
 import { OAuthRefreshError } from '../auth/oauthRefresher';
 import { log } from '../log';
-import { groupByFamily, ParsedSnapshot, parseSnapshot } from './grouping';
+import { groupByFamily, ParsedSnapshot, parseQuotaSummary, parseSnapshot } from './grouping';
 import { readStateValueByKey } from '../auth/tokenReader';
 import { parseUserStatusProto } from '../auth/userStatusParser';
-import { fetchLocalLanguageServerModels } from '../api/localLanguageServerClient';
+import { fetchLocalLanguageServerModels, fetchLocalQuotaSummaryGroups } from '../api/localLanguageServerClient';
 
 export interface AccessTokenProvider {
   getAccessToken(): Promise<string>;
@@ -179,9 +179,31 @@ async function readRemoteQuotaAndCredits(tokenProvider: AccessTokenProvider): Pr
 }
 
 async function readLocalQuotaSnapshot(): Promise<ParsedSnapshot> {
+  try {
+    const summaryGroups = await fetchLocalQuotaSummaryGroups();
+    const snapshot = parseQuotaSummary(summaryGroups);
+    log.info(`[refresh] using authoritative local quota summary: ${summarizeSnapshotCompact(snapshot)}`);
+    log.debug(`[refresh] raw local quota summary: ${JSON.stringify(summaryGroups.map((group) => ({
+      displayName: group.displayName,
+      description: group.description,
+      buckets: group.buckets.map((bucket) => ({
+        bucketId: bucket.bucketId,
+        displayName: bucket.displayName,
+        description: bucket.description,
+        window: bucket.window,
+        remainingFraction: bucket.remainingFraction,
+        resetTime: bucket.resetTime?.toISOString() ?? null
+      }))
+    })))}`);
+    log.debug(`[refresh] parsed local quota-summary groups: ${summarizeSnapshot(snapshot)}`);
+    return snapshot;
+  } catch (err) {
+    log.warn(`[refresh] authoritative quota summary unavailable; using legacy model quota fallback: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   const entries = await fetchLocalLanguageServerModels();
   const snapshot = { groups: groupByFamily(entries), totalModelCount: entries.length };
-  log.info(`[refresh] using local language-server quota: ${summarizeSnapshotCompact(snapshot)}`);
+  log.info(`[refresh] using legacy local model quota: ${summarizeSnapshotCompact(snapshot)}`);
   log.debug(`[refresh] local quota entries: ${JSON.stringify(entries.map((entry) => ({
     modelId: entry.modelId,
     label: entry.label,

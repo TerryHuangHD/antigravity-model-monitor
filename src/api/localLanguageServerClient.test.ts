@@ -1,7 +1,12 @@
 import { EventEmitter } from 'events';
 import * as http from 'http';
 import * as https from 'https';
-import { extractQuotaEntries, parseLanguageServerProcessList, postLocalJson } from './localLanguageServerClient';
+import {
+  extractQuotaEntries,
+  extractQuotaSummaryGroups,
+  parseLanguageServerProcessList,
+  postLocalJson
+} from './localLanguageServerClient';
 
 jest.mock('http', () => ({ request: jest.fn() }));
 jest.mock('https', () => ({ request: jest.fn() }));
@@ -115,6 +120,97 @@ describe('localLanguageServerClient', () => {
       resetTime: new Date('2026-06-04T18:00:00.123Z')
     });
   });
+
+  it('extracts authoritative weekly and five-hour quota-summary buckets', () => {
+    const groups = extractQuotaSummaryGroups({
+      response: {
+        groups: [
+          {
+            displayName: 'Gemini Models',
+            description: 'Models within this group: Gemini Flash, Gemini Pro',
+            buckets: [
+              {
+                bucketId: 'gemini-weekly',
+                displayName: 'Weekly Limit',
+                description: 'Fully refreshes in four days',
+                window: 'weekly',
+                remainingFraction: 0.9070316,
+                resetTime: '2026-08-05T01:04:46Z'
+              },
+              {
+                bucketId: 'gemini-5h',
+                displayName: 'Five Hour Limit',
+                window: '5h',
+                remainingFraction: 0.9778624,
+                resetTime: '2026-07-31T19:59:25Z'
+              }
+            ]
+          }
+        ]
+      }
+    });
+
+    expect(groups).toEqual([
+      {
+        displayName: 'Gemini Models',
+        description: 'Models within this group: Gemini Flash, Gemini Pro',
+        buckets: [
+          {
+            bucketId: 'gemini-weekly',
+            displayName: 'Weekly Limit',
+            description: 'Fully refreshes in four days',
+            window: 'weekly',
+            remainingFraction: 0.9070316,
+            resetTime: new Date('2026-08-05T01:04:46Z')
+          },
+          {
+            bucketId: 'gemini-5h',
+            displayName: 'Five Hour Limit',
+            description: null,
+            window: '5h',
+            remainingFraction: 0.9778624,
+            resetTime: new Date('2026-07-31T19:59:25Z')
+          }
+        ]
+      }
+    ]);
+  });
+
+  it('accepts snake_case quota-summary fields and drops disabled buckets', () => {
+    const groups = extractQuotaSummaryGroups({
+      groups: [{
+        display_name: 'Claude and GPT models',
+        buckets: [
+          {
+            bucket_id: '3p-weekly',
+            display_name: 'Weekly Limit',
+            window: 'weekly',
+            remaining_fraction: 1,
+            reset_time: { seconds: 1785513552 }
+          },
+          {
+            bucket_id: 'disabled',
+            display_name: 'Disabled',
+            disabled: true,
+            remaining_fraction: 0.1
+          }
+        ]
+      }]
+    });
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].displayName).toBe('Claude and GPT models');
+    expect(groups[0].buckets).toEqual([
+      {
+        bucketId: '3p-weekly',
+        displayName: 'Weekly Limit',
+        description: null,
+        window: 'weekly',
+        remainingFraction: 1,
+        resetTime: new Date(1785513552 * 1000)
+      }
+    ]);
+  });
 });
 
 describe('parseLanguageServerProcessList', () => {
@@ -143,6 +239,20 @@ describe('parseLanguageServerProcessList', () => {
 
     expect(processes.map((process) => process.pid)).toEqual([202, 201]);
     expect(processes.map((process) => process.extensionPort)).toEqual([53126, 53125]);
+  });
+
+  it('detects the current antigravity-ide app_data_dir value', () => {
+    const processes = parseLanguageServerProcessList(
+      ' 301 999 /bin/language_server --extension_server_port 60515 --csrf_token current --app_data_dir antigravity-ide',
+      999
+    );
+
+    expect(processes).toEqual([{
+      pid: 301,
+      ppid: 999,
+      extensionPort: 60515,
+      csrfToken: 'current'
+    }]);
   });
 });
 
