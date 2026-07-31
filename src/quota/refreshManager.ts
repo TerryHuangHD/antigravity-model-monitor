@@ -12,6 +12,9 @@ import { groupByFamily, ParsedSnapshot, parseQuotaSummary, parseSnapshot } from 
 import { readStateValueByKey } from '../auth/tokenReader';
 import { parseUserStatusProto } from '../auth/userStatusParser';
 import { fetchLocalLanguageServerModels, fetchLocalQuotaSummaryGroups } from '../api/localLanguageServerClient';
+import { fetchClaudeCodeUsage } from '../subscriptions/claudeCode';
+import { fetchCodexUsage } from '../subscriptions/codex';
+import { SubscriptionKey, SubscriptionUsage } from '../subscriptions/types';
 
 export interface AccessTokenProvider {
   getAccessToken(): Promise<string>;
@@ -21,6 +24,7 @@ export interface AccessTokenProvider {
 export interface QuotaUpdate {
   snapshot: ParsedSnapshot | null;
   availableCredits: number | null;
+  subscriptions: SubscriptionUsage[];
   error: QuotaError | null;
   lastUpdatedAt: Date | null;
   isLoading: boolean;
@@ -33,6 +37,7 @@ export interface QuotaError {
 
 export interface RefreshManagerOptions {
   intervalMs: number;
+  codexCliPath?: string;
 }
 
 export class RefreshManager {
@@ -40,6 +45,7 @@ export class RefreshManager {
   private current: QuotaUpdate = {
     snapshot: null,
     availableCredits: null,
+    subscriptions: [],
     error: null,
     lastUpdatedAt: null,
     isLoading: false
@@ -72,6 +78,10 @@ export class RefreshManager {
     }
   }
 
+  setCodexCliPath(value: string | undefined): void {
+    this.options.codexCliPath = value;
+  }
+
   dispose(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
@@ -84,6 +94,7 @@ export class RefreshManager {
     this.update({ ...this.current, isLoading: true });
 
     this.inflight = (async () => {
+      const subscriptionsPromise = this.refreshSubscriptions();
       try {
         let snapshot: ParsedSnapshot | null = null;
         try {
@@ -91,9 +102,10 @@ export class RefreshManager {
           this.update({
             snapshot,
             availableCredits: this.current.availableCredits,
+            subscriptions: this.current.subscriptions,
             error: null,
             lastUpdatedAt: new Date(),
-            isLoading: false
+            isLoading: true
           });
         } catch (err) {
           log.warn(`[refresh] local language-server quota unavailable; remote API fallback will be used: ${err instanceof Error ? err.message : String(err)}`);
@@ -126,6 +138,7 @@ export class RefreshManager {
         this.update({
           snapshot,
           availableCredits: credits,
+          subscriptions: await subscriptionsPromise,
           error: null,
           lastUpdatedAt: new Date(),
           isLoading: false
@@ -136,6 +149,7 @@ export class RefreshManager {
         this.update({
           snapshot: this.current.snapshot,
           availableCredits: this.current.availableCredits,
+          subscriptions: await subscriptionsPromise,
           error: quotaErr,
           lastUpdatedAt: this.current.lastUpdatedAt,
           isLoading: false
@@ -151,6 +165,59 @@ export class RefreshManager {
   private update(next: QuotaUpdate) {
     this.current = next;
     this.emitter.fire(next);
+  }
+
+  private async refreshSubscriptions(): Promise<SubscriptionUsage[]> {
+    const previous = new Map(this.current.subscriptions.map((subscription) => [subscription.key, subscription]));
+    return Promise.all([
+      this.readSubscription(
+        'claude-code',
+        'Claude Code',
+        'Claude subscription usage shared with Claude Code.',
+        'Claude Code OAuth usage',
+        fetchClaudeCodeUsage,
+        previous.get('claude-code')
+      ),
+      this.readSubscription(
+        'codex',
+        'Codex',
+        'ChatGPT Codex subscription usage from the local Codex app server.',
+        'codex app-server',
+        () => fetchCodexUsage(this.options.codexCliPath),
+        previous.get('codex')
+      )
+    ]);
+  }
+
+  private async readSubscription(
+    key: SubscriptionKey,
+    name: string,
+    description: string,
+    source: string,
+    reader: () => Promise<SubscriptionUsage>,
+    previous: SubscriptionUsage | undefined
+  ): Promise<SubscriptionUsage> {
+    try {
+      const usage = await reader();
+      const summary = usage.limits
+        .map((limit) => `${limit.label}=${Math.round(limit.remainingFraction * 100)}%`)
+        .join(', ');
+      log.info(`[refresh] ${name}: ${summary}`);
+      return usage;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      log.warn(`[refresh] ${name} unavailable: ${message}`);
+      return {
+        key,
+        name,
+        description,
+        account: previous?.account ?? null,
+        source,
+        limits: previous?.limits ?? [],
+        error: message,
+        lastUpdatedAt: previous?.lastUpdatedAt ?? null
+      };
+    }
   }
 }
 
