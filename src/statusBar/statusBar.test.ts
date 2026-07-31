@@ -73,7 +73,7 @@ describe('StatusBarController tooltip', () => {
 
     const tooltip = item.tooltip as vscode.MarkdownString;
     expect(tooltip.value).toContain('#### Antigravity');
-    expect(tooltip.value).toContain('🟡 **Gemini Models · Weekly Limit** · **42% remaining**');
+    expect(tooltip.value).toContain('🟡 **Gemini Models · 7d** · **42% remaining**');
     expect(tooltip.value).toContain('#### Codex');
     expect(item.text).toContain('Codex 7d: 72%');
     expect(tooltip.value).toContain('$(clock) Resets in **');

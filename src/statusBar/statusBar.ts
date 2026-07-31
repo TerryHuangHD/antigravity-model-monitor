@@ -215,7 +215,7 @@ function appendContent(
 ): void {
   const percent = content.remainingFraction * 100;
   const bar = renderBar(content.remainingFraction, 16);
-  markdown.appendMarkdown(`> ${pickDot(percent, thresholds)} **${escapeMd(formatTooltipLabel(content.name))}** · **${formatPercent(percent)} remaining**  \n`);
+  markdown.appendMarkdown(`> ${pickDot(percent, thresholds)} **${escapeMd(content.name)}** · **${formatPercent(percent)} remaining**  \n`);
   markdown.appendMarkdown(`> \`${bar}\`  \n`);
   if (content.resetTime) {
     const reset = formatResetDetails(content.resetTime);
@@ -236,7 +236,9 @@ function collectErrors(subscriptions: VisibleSubscription[]): string[] {
 function shortContentName(name: string): string {
   return name
     .replace(/Five Hour Limit/gi, '5h')
-    .replace(/Weekly Limit/gi, '7d');
+    .replace(/Weekly Limit/gi, '7d')
+    .replace(/\b5H\b/gi, '5h')
+    .replace(/\b7D\b/gi, '7d');
 }
 
 function pickDot(percent: number, thresholds: ThresholdConfig): string {
@@ -249,12 +251,6 @@ function pickBackground(percent: number, thresholds: ThresholdConfig): vscode.Th
   if (percent <= thresholds.critical) return new vscode.ThemeColor('statusBarItem.errorBackground');
   if (percent <= thresholds.warning) return new vscode.ThemeColor('statusBarItem.warningBackground');
   return undefined;
-}
-
-function formatTooltipLabel(label: string): string {
-  if (label === 'Weekly Limit') return 'Weekly Limit (7D)';
-  if (label === 'Five Hour Limit') return 'Five Hour Limit (5H)';
-  return label;
 }
 
 function renderBar(fraction: number, width = 12): string {

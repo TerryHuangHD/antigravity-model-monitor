@@ -28,7 +28,7 @@ describe('buildMonitorSubscriptions', () => {
         totalModelCount: 2,
         groups: [{
           key: 'gemini',
-          autoName: 'Gemini Models',
+          autoName: 'Gemini 5H',
           minRemainingFraction: 0.6,
           members: [
             { modelId: 'gemini-weekly', label: 'Weekly Limit', remainingFraction: 0.6, resetTime: null },
@@ -71,8 +71,8 @@ describe('buildMonitorSubscriptions', () => {
     expect(subscriptions[0]).toMatchObject({ name: 'Codex Work', customName: 'Codex Work', hidden: false });
     expect(subscriptions[0].contents[0]).toMatchObject({ name: 'Weekly budget', customName: 'Weekly budget' });
     expect(subscriptions[1].contents.map((content) => content.originalLabel)).toEqual([
-      'Gemini Models · Weekly Limit',
-      'Gemini Models · Five Hour Limit'
+      'Gemini 5h · 7d',
+      'Gemini 5h · 5h'
     ]);
     expect(subscriptions[1].contents[1].hidden).toBe(true);
     expect(subscriptions[2].hidden).toBe(true);
@@ -81,8 +81,8 @@ describe('buildMonitorSubscriptions', () => {
 
   it('preserves legacy Antigravity names, visibility, and model order', async () => {
     const names = new CustomNamesStore(new FakeMemento());
-    await names.setGroupName('gemini', 'Gemini Pool');
-    await names.setModelName('weekly', 'Seven days');
+    await names.setGroupName('gemini', 'Gemini 5H');
+    await names.setModelName('weekly', '7D');
     await names.setModelHidden('five-hour', true);
     await names.setModelOrder('gemini', ['five-hour', 'weekly']);
 
@@ -94,8 +94,8 @@ describe('buildMonitorSubscriptions', () => {
           autoName: 'Gemini Models',
           minRemainingFraction: 0.5,
           members: [
-            { modelId: 'weekly', label: 'Weekly Limit', remainingFraction: 0.5, resetTime: null },
-            { modelId: 'five-hour', label: 'Five Hour Limit', remainingFraction: 0.8, resetTime: null }
+            { modelId: 'weekly', label: '7D Limit', remainingFraction: 0.5, resetTime: null },
+            { modelId: 'five-hour', label: '5H Limit', remainingFraction: 0.8, resetTime: null }
           ]
         }]
       },
@@ -106,8 +106,8 @@ describe('buildMonitorSubscriptions', () => {
 
     const antigravity = subscriptions.find((subscription) => subscription.key === 'antigravity');
     expect(antigravity?.contents.map((content) => content.originalLabel)).toEqual([
-      'Gemini Pool · Five Hour Limit',
-      'Gemini Pool · Seven days'
+      'Gemini 5h · 5h',
+      'Gemini 5h · 7d'
     ]);
     expect(antigravity?.contents[0].hidden).toBe(true);
     names.dispose();
@@ -139,6 +139,45 @@ describe('buildMonitorSubscriptions', () => {
     const antigravity = subscriptions.find((subscription) => subscription.key === 'antigravity');
     expect(antigravity?.contents.find((content) => content.id.endsWith(':weekly'))?.hidden).toBe(false);
     expect(antigravity?.contents.find((content) => content.id.endsWith(':five-hour'))?.hidden).toBe(true);
+    names.dispose();
+  });
+
+  it('uses the same compact quota terms across all default subscription labels', () => {
+    const names = new CustomNamesStore(new FakeMemento());
+    const subscriptions = buildMonitorSubscriptions(
+      {
+        totalModelCount: 2,
+        groups: [{
+          key: 'gemini',
+          autoName: 'Gemini Models',
+          minRemainingFraction: 0.5,
+          members: [
+            { modelId: 'weekly', label: 'Weekly Limit', remainingFraction: 0.5, resetTime: null },
+            { modelId: 'five-hour', label: 'Five Hour Limit', remainingFraction: 0.8, resetTime: null }
+          ]
+        }]
+      },
+      [{
+        key: 'claude-code',
+        name: 'Claude Code',
+        description: 'Claude usage',
+        account: null,
+        source: 'Claude source',
+        limits: [
+          { id: 'weekly-opus', label: 'Weekly Opus Limit', remainingFraction: 0.6, resetTime: null, windowMinutes: 10080 },
+          { id: 'five-hour', label: 'Five Hour Limit (5H)', remainingFraction: 0.8, resetTime: null, windowMinutes: 300 }
+        ],
+        error: null,
+        lastUpdatedAt: null
+      }],
+      names,
+      { account: null, description: null, error: null, lastUpdatedAt: null }
+    );
+
+    expect(subscriptions.find((subscription) => subscription.key === 'antigravity')?.contents
+      .map((content) => content.originalLabel)).toEqual(['Gemini Models · 7d', 'Gemini Models · 5h']);
+    expect(subscriptions.find((subscription) => subscription.key === 'claude-code')?.contents
+      .map((content) => content.originalLabel)).toEqual(['Opus 7d', '5h']);
     names.dispose();
   });
 });

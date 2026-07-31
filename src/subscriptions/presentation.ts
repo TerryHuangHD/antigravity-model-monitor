@@ -74,10 +74,16 @@ function buildAntigravitySubscription(
   const contents: MonitorContent[] = [];
   const customizations = names.snapshot();
   for (const group of snapshot?.groups ?? []) {
-    const legacyGroupName = names.getGroupName(group.key, group.autoName);
+    const storedGroupName = customizations.groups[group.key]?.trim();
+    const legacyGroupName = storedGroupName
+      ? normalizeDurationCase(storedGroupName)
+      : compactQuotaLabel(group.autoName);
     for (const member of names.orderModels(group.key, group.members)) {
       const id = `antigravity:${group.key}:${member.modelId}`;
-      const legacyMemberName = names.getModelName(member.modelId, member.label);
+      const storedMemberName = customizations.models[member.modelId]?.trim();
+      const legacyMemberName = storedMemberName
+        ? normalizeDurationCase(storedMemberName)
+        : compactQuotaLabel(member.label);
       const originalLabel = `${legacyGroupName} · ${legacyMemberName}`;
       const customName = customizations.contentNames[id] ?? null;
       const hiddenOverride = names.getContentHiddenOverride(id);
@@ -117,11 +123,12 @@ function buildExternalSubscription(
   const contents = (usage?.limits ?? []).map((limit): MonitorContent => {
     const id = `${defaults.key}:${limit.id}`;
     const customName = customizations.contentNames[id] ?? null;
+    const originalLabel = compactQuotaLabel(limit.label);
     return {
       id,
-      originalLabel: limit.label,
+      originalLabel,
       customName,
-      name: names.getContentName(id, limit.label),
+      name: names.getContentName(id, originalLabel),
       hidden: names.isContentHidden(id),
       remainingFraction: limit.remainingFraction,
       resetTime: limit.resetTime,
@@ -155,4 +162,19 @@ function inferWindowMinutes(label: string): number | null {
   if (/five hour/i.test(label)) return 5 * 60;
   if (/weekly/i.test(label)) return 7 * 24 * 60;
   return null;
+}
+
+function compactQuotaLabel(label: string): string {
+  return label
+    .replace(/\bFive Hour Limit(?:\s*\(5H\))?/gi, '5h')
+    .replace(/\bWeekly Limit(?:\s*\(7D\))?/gi, '7d')
+    .replace(/\bWeekly\s+(.+?)\s+Limit(?:\s*\(7D\))?/gi, '$1 7d')
+    .replace(/\b5H(?:\s+Limit)?\b/gi, '5h')
+    .replace(/\b7D(?:\s+Limit)?\b/gi, '7d');
+}
+
+function normalizeDurationCase(label: string): string {
+  return label
+    .replace(/\b5H\b/g, '5h')
+    .replace(/\b7D\b/g, '7d');
 }
