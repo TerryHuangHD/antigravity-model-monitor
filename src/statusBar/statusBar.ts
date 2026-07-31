@@ -76,7 +76,7 @@ export class StatusBarController {
     }
 
     this.item.text = formatStatusBarText(visibleGroups, latest.availableCredits, names, thresholds);
-    this.item.tooltip = buildTooltip(visibleGroups, names, latest.lastUpdatedAt, latest.error);
+    this.item.tooltip = buildTooltip(visibleGroups, names, thresholds, latest.lastUpdatedAt, latest.error);
 
     const overallPct = Math.round(visibleGroups[0].effectiveMinFraction * 100);
     this.item.backgroundColor = pickBackground(overallPct, thresholds);
@@ -146,7 +146,6 @@ function formatStatusBarText(
   for (const group of groups) {
     for (const member of group.members) {
       const pct = Math.round(member.remainingFraction * 100);
-      const dot = pickDot(pct, thresholds);
       const groupName = names.getGroupName(group.key, group.autoName);
       const memberName = names.getModelName(member.modelId, member.label);
 
@@ -158,7 +157,7 @@ function formatStatusBarText(
       if (memberName === 'Five Hour Limit') shortLabel = '5h';
       else if (memberName === 'Weekly Limit') shortLabel = '7d';
 
-      parts.push(`${dot} ${shortGroupName} ${shortLabel}: ${pct}%`);
+      parts.push(`$(rocket) ${shortGroupName} ${shortLabel}: ${pct}%`);
     }
   }
   return parts.join('  ');
@@ -199,6 +198,7 @@ function buildAllHiddenTooltip(lastUpdatedAt: Date | null): vscode.MarkdownStrin
 function buildTooltip(
   groups: VisibleGroup[],
   names: CustomNamesStore,
+  thresholds: ThresholdConfig,
   lastUpdatedAt: Date | null,
   error: QuotaError | null
 ): vscode.MarkdownString {
@@ -207,36 +207,51 @@ function buildTooltip(
   md.supportThemeIcons = true;
   md.appendMarkdown('### $(rocket) Antigravity Model Monitor\n\n');
 
-  for (const group of groups) {
+  for (const [groupIndex, group] of groups.entries()) {
+    if (groupIndex > 0) md.appendMarkdown('---\n\n');
+
     const groupName = names.getGroupName(group.key, group.autoName);
-    md.appendMarkdown(`**${escapeMd(groupName)}**\n\n`);
-    md.appendMarkdown('| | Limit | | Remaining | Reset |\n');
-    md.appendMarkdown('|---|---|---|---:|---|\n');
+    md.appendMarkdown(`#### ${escapeMd(groupName)}\n\n`);
+
     for (const member of group.members /* already filtered to visible */) {
       const label = names.getModelName(member.modelId, member.label);
       const pct = member.remainingFraction * 100;
-      const dot = renderDotIcon(pct);
-      const bar = renderBar(member.remainingFraction);
+      const dot = pickDot(pct, thresholds);
+      const displayLabel = formatTooltipLabel(label);
       const pctText = formatPercent(pct);
-      const reset = member.resetTime ? formatReset(member.resetTime) : '—';
-      md.appendMarkdown(`| ${dot} | ${escapeMd(label)} | \`${bar}\` | ${pctText} | ${escapeMd(reset)} |\n`);
+      const bar = renderBar(member.remainingFraction, 16);
+
+      md.appendMarkdown(`> ${dot} **${escapeMd(displayLabel)}** · **${pctText} remaining**  \n`);
+      md.appendMarkdown(`> \`${bar}\`  \n`);
+
+      if (member.resetTime) {
+        const reset = formatResetDetails(member.resetTime);
+        if (reset.available) {
+          md.appendMarkdown('> $(check) Available now\n\n');
+        } else {
+          md.appendMarkdown(`> $(clock) Resets in **${escapeMd(reset.relative)}** · \`${escapeMd(reset.absolute)}\`\n\n`);
+        }
+      } else {
+        md.appendMarkdown('> $(clock) Reset time unavailable\n\n');
+      }
     }
-    md.appendMarkdown('\n');
   }
 
   if (error) {
     md.appendMarkdown(`> ⚠️ Last refresh failed: ${escapeMd(error.message)}\n\n`);
   }
 
+  md.appendMarkdown('---\n\n');
   const updatedAt = lastUpdatedAt ? `Updated ${formatRelative(lastUpdatedAt, true)}` : 'Loading…';
-  md.appendMarkdown(`_${escapeMd(updatedAt)} · click to open the management panel._`);
+  md.appendMarkdown(`_${escapeMd(updatedAt)}_\n\n`);
+  md.appendMarkdown('[$(dashboard) Open dashboard](command:agModelMonitor.openPanel) · [$(refresh) Refresh now](command:agModelMonitor.refresh)');
   return md;
 }
 
-function renderDotIcon(pct: number): string {
-  if (pct <= 10) return '🔴';
-  if (pct <= 30) return '🟡';
-  return '🟢';
+function formatTooltipLabel(label: string): string {
+  if (label === 'Weekly Limit') return 'Weekly Limit (7D)';
+  if (label === 'Five Hour Limit') return 'Five Hour Limit (5H)';
+  return label;
 }
 
 function renderBar(fraction: number, width = 12): string {
@@ -254,9 +269,15 @@ function formatNumber(n: number): string {
   return n.toLocaleString('en-US');
 }
 
-function formatReset(resetTime: Date): string {
+interface ResetDetails {
+  available: boolean;
+  relative: string;
+  absolute: string;
+}
+
+function formatResetDetails(resetTime: Date): ResetDetails {
   const diffMs = resetTime.getTime() - Date.now();
-  if (diffMs <= 0) return 'available';
+  if (diffMs <= 0) return { available: true, relative: '', absolute: '' };
   const minutes = Math.floor(diffMs / 60000);
   const hours = Math.floor(minutes / 60);
   const days = Math.floor(hours / 24);
@@ -273,7 +294,7 @@ function formatReset(resetTime: Date): string {
   else if (hours > 0) relativeStr = `${hours}h ${minutes % 60}m`;
   else relativeStr = `${minutes}m`;
 
-  return `${relativeStr} (${absoluteStr})`;
+  return { available: false, relative: relativeStr, absolute: absoluteStr };
 }
 
 function formatRelative(date: Date, past = false): string {
