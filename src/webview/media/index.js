@@ -4,9 +4,8 @@
   const subtitle = document.getElementById('subtitle');
   const content = document.getElementById('content');
   const refreshBtn = document.getElementById('refresh-btn');
+  const refreshIntervalInput = document.getElementById('refresh-interval');
   const resetAllBtn = document.getElementById('reset-all');
-  const creditsEl = document.getElementById('credits');
-  const creditsValueEl = document.getElementById('credits-value');
 
   // Premium elements for Plan Details
   const planCard = document.getElementById('plan-card');
@@ -18,11 +17,6 @@
   const toggleDataBtn = document.getElementById('toggle-data-btn');
   const toggleExpandBtn = document.getElementById('toggle-expand-btn');
 
-  // Premium elements for Settings Card
-  const settingsCard = document.getElementById('settings-card');
-  const settingShowCreditsContainer = document.getElementById('setting-show-credits-container');
-  const settingRefreshInterval = document.getElementById('setting-refresh-interval');
-
   let isDataHidden = localStorage.getItem('isDataHidden') === 'true';
   let isExpanded = localStorage.getItem('isPlanExpanded') === 'true';
   let lastPlanState = null;
@@ -32,9 +26,9 @@
   updateExpandState();
 
   // Listen for refresh interval changes
-  settingRefreshInterval.addEventListener('change', () => {
-    const val = parseInt(settingRefreshInterval.value, 10);
-    if (!isNaN(val) && val >= 10 && val <= 3600) {
+  refreshIntervalInput.addEventListener('change', () => {
+    const val = Number(refreshIntervalInput.value);
+    if (Number.isFinite(val) && val >= 10 && val <= 3600) {
       vscode.postMessage({ type: 'setRefreshInterval', value: val });
     }
   });
@@ -70,7 +64,7 @@
 
   refreshBtn.addEventListener('click', () => vscode.postMessage({ type: 'refresh' }));
   resetAllBtn.addEventListener('click', () => {
-    if (window.confirm('Clear all custom names and show every family/model?')) {
+    if (window.confirm('Clear all custom names, visibility choices, and display order?')) {
       vscode.postMessage({ type: 'resetAll' });
     }
   });
@@ -82,15 +76,9 @@
 
   function render(state) {
     subtitle.textContent = formatSubtitle(state);
-    if (state.credits != null) {
-      creditsValueEl.textContent = state.credits.toLocaleString('en-US');
-      creditsEl.hidden = false;
-    } else {
-      creditsEl.hidden = true;
-    }
 
     renderPlanDetails(state.plan);
-    renderSettings(state.showCredits, state.refreshInterval);
+    syncRefreshInterval(state.refreshInterval);
 
     content.replaceChildren();
 
@@ -160,6 +148,7 @@
     const list = document.createElement('ul');
     list.className = 'model-list';
     for (const member of group.members) list.appendChild(renderMember(member));
+    enableModelReordering(list, group.key);
     section.appendChild(list);
 
     return section;
@@ -168,6 +157,16 @@
   function renderMember(member) {
     const row = document.createElement('li');
     row.className = 'model-row' + (member.hidden ? ' is-hidden' : '');
+    row.dataset.modelId = member.modelId;
+
+    const dragHandle = document.createElement('button');
+    dragHandle.type = 'button';
+    dragHandle.className = 'drag-handle';
+    dragHandle.draggable = true;
+    dragHandle.textContent = '⠿';
+    dragHandle.title = 'Drag to change display order; use arrow keys for keyboard control';
+    dragHandle.setAttribute('aria-label', `Reorder ${member.customName || member.originalLabel}`);
+    row.appendChild(dragHandle);
 
     const visibilitySwitch = renderSwitch({
       checked: !member.hidden,
@@ -229,6 +228,91 @@
     row.appendChild(resetCell);
 
     return row;
+  }
+
+  function enableModelReordering(list, groupKey) {
+    let draggedRow = null;
+    let startingOrder = [];
+
+    const rows = () => [...list.querySelectorAll('.model-row')];
+    const modelIds = () => rows().map((row) => row.dataset.modelId).filter(Boolean);
+
+    const clearDraggingState = () => {
+      if (draggedRow) draggedRow.classList.remove('is-dragging');
+      draggedRow = null;
+      startingOrder = [];
+    };
+
+    const restoreStartingOrder = () => {
+      const byId = new Map(rows().map((row) => [row.dataset.modelId, row]));
+      for (const modelId of startingOrder) {
+        const row = byId.get(modelId);
+        if (row) list.appendChild(row);
+      }
+    };
+
+    const saveOrder = () => {
+      const nextOrder = modelIds();
+      if (nextOrder.join('\u0000') !== startingOrder.join('\u0000')) {
+        vscode.postMessage({ type: 'setModelOrder', groupKey, modelIds: nextOrder });
+      }
+    };
+
+    for (const row of rows()) {
+      const handle = row.querySelector('.drag-handle');
+
+      handle.addEventListener('dragstart', (event) => {
+        draggedRow = row;
+        startingOrder = modelIds();
+        row.classList.add('is-dragging');
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', row.dataset.modelId || '');
+      });
+
+      handle.addEventListener('dragend', () => {
+        if (!draggedRow) return;
+        restoreStartingOrder();
+        clearDraggingState();
+      });
+
+      handle.addEventListener('keydown', (event) => {
+        if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+        const sibling = event.key === 'ArrowUp' ? row.previousElementSibling : row.nextElementSibling;
+        if (!sibling) return;
+
+        event.preventDefault();
+        startingOrder = modelIds();
+        if (event.key === 'ArrowUp') list.insertBefore(row, sibling);
+        else list.insertBefore(sibling, row);
+        saveOrder();
+        startingOrder = [];
+        handle.focus();
+      });
+    }
+
+    list.addEventListener('dragover', (event) => {
+      if (!draggedRow) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+
+      const target = event.target.closest('.model-row');
+      if (!target) {
+        list.appendChild(draggedRow);
+        return;
+      }
+      if (target === draggedRow) return;
+
+      const bounds = target.getBoundingClientRect();
+      const insertAfter = event.clientY > bounds.top + bounds.height / 2;
+      list.insertBefore(draggedRow, insertAfter ? target.nextSibling : target);
+    });
+
+    list.addEventListener('drop', (event) => {
+      if (!draggedRow) return;
+      event.preventDefault();
+      saveOrder();
+      clearDraggingState();
+    });
   }
 
   function renderSwitch({ checked, onChange, title, small }) {
@@ -343,7 +427,6 @@
       { label: 'MCP Servers', value: plan.features.mcpServers, isBool: true, primary: true },
       { label: 'Git Commit Gen', value: plan.features.gitCommitGen, isBool: true },
       { label: 'Autocomplete Fast Mode', value: plan.features.autocompleteFastMode, isBool: true },
-      { label: 'Can Buy Credits', value: plan.features.canBuyCredits, isBool: true },
       { label: 'Tab To Jump', value: plan.features.tabToJump, isBool: true },
       { label: 'Sticky Models', value: plan.features.stickyModels, isBool: true },
       { label: 'Command Models', value: plan.features.commandModels, isBool: true },
@@ -391,23 +474,9 @@
     }
   }
 
-  function renderSettings(showCredits, refreshInterval) {
-    settingsCard.hidden = false;
-
-    // Render Show Credits Switch
-    settingShowCreditsContainer.replaceChildren();
-    const switchEl = renderSwitch({
-      checked: showCredits,
-      small: true,
-      onChange: (checked) => {
-        vscode.postMessage({ type: 'setShowCredits', value: checked });
-      }
-    });
-    settingShowCreditsContainer.appendChild(switchEl);
-
-    // Update Refresh Interval Input (if user is not currently typing)
-    if (document.activeElement !== settingRefreshInterval) {
-      settingRefreshInterval.value = refreshInterval;
+  function syncRefreshInterval(refreshInterval) {
+    if (document.activeElement !== refreshIntervalInput) {
+      refreshIntervalInput.value = refreshInterval;
     }
   }
 })();

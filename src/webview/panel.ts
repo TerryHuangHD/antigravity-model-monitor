@@ -17,15 +17,16 @@ interface InboundMessage {
     | 'renameModel'
     | 'setGroupHidden'
     | 'setModelHidden'
+    | 'setModelOrder'
     | 'resetAll'
     | 'refresh'
-    | 'setShowCredits'
     | 'setRefreshInterval';
   groupKey?: string;
   modelId?: string;
+  modelIds?: string[];
   name?: string | null;
   hidden?: boolean;
-  value?: boolean;
+  value?: number;
 }
 
 interface OutboundInit {
@@ -52,13 +53,11 @@ interface GroupView {
 }
 
 interface ViewState {
-  credits: number | null;
   groups: GroupView[];
   lastUpdatedAt: string | null;
   isLoading: boolean;
   error: string | null;
   plan: PlanDetailsView | null;
-  showCredits: boolean;
   refreshInterval: number;
 }
 
@@ -123,19 +122,19 @@ export class ManagementPanel {
       case 'setModelHidden':
         if (msg.modelId != null) await this.names.setModelHidden(msg.modelId, !!msg.hidden);
         break;
+      case 'setModelOrder':
+        if (msg.groupKey != null && Array.isArray(msg.modelIds)) {
+          await this.names.setModelOrder(msg.groupKey, msg.modelIds);
+        }
+        break;
       case 'resetAll':
         await this.names.resetAll();
         break;
       case 'refresh':
         void this.refresh.refresh();
         break;
-      case 'setShowCredits':
-        if (msg.value !== undefined) {
-          await vscode.workspace.getConfiguration('agModelMonitor').update('showCreditsInStatusBar', msg.value, vscode.ConfigurationTarget.Global);
-        }
-        break;
       case 'setRefreshInterval':
-        if (msg.value !== undefined) {
+        if (msg.value !== undefined && Number.isFinite(msg.value) && msg.value >= 10 && msg.value <= 3600) {
           await vscode.workspace.getConfiguration('agModelMonitor').update('refreshIntervalSeconds', msg.value, vscode.ConfigurationTarget.Global);
         }
         break;
@@ -157,17 +156,14 @@ export class ManagementPanel {
       log.error(`[panel] failed to read plan details: ${err}`);
     }
 
-    const showCredits = vscode.workspace.getConfiguration('agModelMonitor').get<boolean>('showCreditsInStatusBar', true);
     const refreshInterval = vscode.workspace.getConfiguration('agModelMonitor').get<number>('refreshIntervalSeconds', 120);
 
     const payload: ViewState = {
-      credits: update.availableCredits ?? plan?.credits ?? null,
       groups: (update.snapshot?.groups ?? []).map((g) => mapGroup(g, this.names)),
       lastUpdatedAt: update.lastUpdatedAt?.toISOString() ?? null,
       isLoading: update.isLoading,
       error: update.error?.message ?? null,
       plan,
-      showCredits,
       refreshInterval
     };
     const message: OutboundInit = { type: 'state', payload };
@@ -198,7 +194,7 @@ function mapGroup(g: FamilyGroup, names: CustomNamesStore): GroupView {
     customName: snap.groups[g.key] ?? null,
     hidden: snap.hiddenGroups[g.key] === true,
     minRemainingPercent: Math.round(g.minRemainingFraction * 100),
-    members: g.members.map((m) => ({
+    members: names.orderModels(g.key, g.members).map((m) => ({
       modelId: m.modelId,
       originalLabel: m.label,
       customName: snap.models[m.modelId] ?? null,

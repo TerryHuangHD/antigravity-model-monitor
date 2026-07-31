@@ -70,13 +70,13 @@ export class StatusBarController {
     if (visibleGroups.length === 0) {
       // Everything hidden by the user — keep the bar visible but minimal.
       this.item.text = '$(eye-closed) AG Model Monitor';
-      this.item.tooltip = buildAllHiddenTooltip(latest.availableCredits, latest.lastUpdatedAt);
+      this.item.tooltip = buildAllHiddenTooltip(latest.lastUpdatedAt);
       this.item.backgroundColor = undefined;
       return;
     }
 
     this.item.text = formatStatusBarText(visibleGroups, latest.availableCredits, names, thresholds);
-    this.item.tooltip = buildTooltip(visibleGroups, latest.availableCredits, names, latest.lastUpdatedAt, latest.error);
+    this.item.tooltip = buildTooltip(visibleGroups, names, latest.lastUpdatedAt, latest.error);
 
     const overallPct = Math.round(visibleGroups[0].effectiveMinFraction * 100);
     this.item.backgroundColor = pickBackground(overallPct, thresholds);
@@ -120,7 +120,8 @@ function filterVisible(groups: FamilyGroup[], names: CustomNamesStore): VisibleG
   const out: VisibleGroup[] = [];
   for (const g of groups) {
     if (names.isGroupHidden(g.key)) continue;
-    const members = g.members.filter((m) => !names.isModelHidden(m.modelId));
+    const members = names.orderModels(g.key, g.members)
+      .filter((m) => !names.isModelHidden(m.modelId));
     if (members.length === 0) continue;
     const min = members.reduce((acc, m) => Math.min(acc, m.remainingFraction), Infinity);
     out.push({
@@ -184,12 +185,11 @@ function buildErrorTooltip(error: QuotaError): vscode.MarkdownString {
   return md;
 }
 
-function buildAllHiddenTooltip(credits: number | null, lastUpdatedAt: Date | null): vscode.MarkdownString {
+function buildAllHiddenTooltip(lastUpdatedAt: Date | null): vscode.MarkdownString {
   const md = new vscode.MarkdownString();
   md.isTrusted = true;
   md.supportThemeIcons = true;
   md.appendMarkdown('### $(rocket) Antigravity Model Monitor\n\n');
-  if (credits != null) md.appendMarkdown(`$(database) **Credits:** ${formatNumber(credits)}\n\n`);
   md.appendMarkdown('_All families are hidden. Open the panel to show some._\n\n');
   if (lastUpdatedAt) md.appendMarkdown(`_Updated ${formatRelative(lastUpdatedAt, true)}._\n\n`);
   md.appendMarkdown('Click to open the management panel.');
@@ -198,7 +198,6 @@ function buildAllHiddenTooltip(credits: number | null, lastUpdatedAt: Date | nul
 
 function buildTooltip(
   groups: VisibleGroup[],
-  credits: number | null,
   names: CustomNamesStore,
   lastUpdatedAt: Date | null,
   error: QuotaError | null
@@ -207,10 +206,6 @@ function buildTooltip(
   md.isTrusted = true;
   md.supportThemeIcons = true;
   md.appendMarkdown('### $(rocket) Antigravity Model Monitor\n\n');
-
-  if (credits != null) {
-    md.appendMarkdown(`$(database) **Credits:** ${formatNumber(credits)}\n\n`);
-  }
 
   for (const group of groups) {
     const groupName = names.getGroupName(group.key, group.autoName);

@@ -42,12 +42,14 @@ describe('CustomNamesStore', () => {
     await store.setModelName('m1', 'Mod');
     await store.setGroupHidden('g1', true);
     await store.setModelHidden('m1', true);
+    await store.setModelOrder('g1', ['m2', 'm1']);
     await store.resetAll();
     const snap = store.snapshot();
     expect(snap.groups).toEqual({});
     expect(snap.models).toEqual({});
     expect(snap.hiddenGroups).toEqual({});
     expect(snap.hiddenModels).toEqual({});
+    expect(snap.modelOrder).toEqual({});
   });
 
   it('fires onChange when state mutates', async () => {
@@ -58,8 +60,9 @@ describe('CustomNamesStore', () => {
     await store.setModelName('m1', 'B');
     await store.setGroupHidden('g1', true);
     await store.setModelHidden('m1', true);
+    await store.setModelOrder('g1', ['m1']);
     await store.resetAll();
-    expect(count).toBe(5);
+    expect(count).toBe(6);
   });
 
   describe('visibility', () => {
@@ -85,6 +88,33 @@ describe('CustomNamesStore', () => {
       await store.setGroupHidden('g1', false);
       expect(store.isGroupHidden('g1')).toBe(false);
       expect(store.snapshot().hiddenGroups).toEqual({});
+    });
+  });
+
+  describe('model ordering', () => {
+    const models = [
+      { modelId: 'weekly', label: 'Weekly Limit' },
+      { modelId: 'five-hour', label: 'Five Hour Limit' },
+      { modelId: 'new-limit', label: 'New Limit' }
+    ];
+
+    it('persists an order and appends models that are not in the saved order', async () => {
+      const memento = new FakeMemento();
+      const a = new CustomNamesStore(memento);
+      await a.setModelOrder('gemini', ['five-hour', 'weekly']);
+
+      const b = new CustomNamesStore(memento);
+      expect(b.orderModels('gemini', models).map((model) => model.modelId)).toEqual([
+        'five-hour',
+        'weekly',
+        'new-limit'
+      ]);
+    });
+
+    it('normalizes duplicate and blank model IDs before persisting', async () => {
+      const store = new CustomNamesStore(new FakeMemento());
+      await store.setModelOrder('gemini', [' weekly ', '', 'five-hour', 'weekly']);
+      expect(store.snapshot().modelOrder.gemini).toEqual(['weekly', 'five-hour']);
     });
   });
 });

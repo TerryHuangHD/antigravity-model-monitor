@@ -7,13 +7,15 @@ export interface CustomNamesData {
   models: Record<string, string>;
   hiddenGroups: Record<string, true>;
   hiddenModels: Record<string, true>;
+  modelOrder: Record<string, string[]>;
 }
 
 const empty = (): CustomNamesData => ({
   groups: {},
   models: {},
   hiddenGroups: {},
-  hiddenModels: {}
+  hiddenModels: {},
+  modelOrder: {}
 });
 
 export class CustomNamesStore {
@@ -30,7 +32,10 @@ export class CustomNamesStore {
       groups: { ...this.data.groups },
       models: { ...this.data.models },
       hiddenGroups: { ...this.data.hiddenGroups },
-      hiddenModels: { ...this.data.hiddenModels }
+      hiddenModels: { ...this.data.hiddenModels },
+      modelOrder: Object.fromEntries(
+        Object.entries(this.data.modelOrder).map(([groupKey, modelIds]) => [groupKey, [...modelIds]])
+      )
     };
   }
 
@@ -48,6 +53,22 @@ export class CustomNamesStore {
 
   isModelHidden(modelId: string): boolean {
     return this.data.hiddenModels[modelId] === true;
+  }
+
+  orderModels<T extends { modelId: string }>(groupKey: string, models: readonly T[]): T[] {
+    const savedOrder = this.data.modelOrder[groupKey];
+    if (!savedOrder?.length) return [...models];
+
+    const rank = new Map(savedOrder.map((modelId, index) => [modelId, index]));
+    return models
+      .map((model, index) => ({ model, index, rank: rank.get(model.modelId) }))
+      .sort((a, b) => {
+        if (a.rank !== undefined && b.rank !== undefined) return a.rank - b.rank;
+        if (a.rank !== undefined) return -1;
+        if (b.rank !== undefined) return 1;
+        return a.index - b.index;
+      })
+      .map(({ model }) => model);
   }
 
   async setGroupName(groupKey: string, name: string | null): Promise<void> {
@@ -74,6 +95,13 @@ export class CustomNamesStore {
     await this.persist();
   }
 
+  async setModelOrder(groupKey: string, modelIds: readonly string[]): Promise<void> {
+    const normalized = normalizeModelIds(modelIds);
+    if (normalized.length) this.data.modelOrder[groupKey] = normalized;
+    else delete this.data.modelOrder[groupKey];
+    await this.persist();
+  }
+
   async resetAll(): Promise<void> {
     this.data = empty();
     await this.persist();
@@ -95,11 +123,21 @@ function sanitize(raw: CustomNamesData | undefined): CustomNamesData {
     !!o && typeof o === 'object' && Object.values(o as Record<string, unknown>).every((v) => typeof v === 'string');
   const isBoolMap = (o: unknown): o is Record<string, true> =>
     !!o && typeof o === 'object' && Object.values(o as Record<string, unknown>).every((v) => v === true);
+  const isStringArrayMap = (o: unknown): o is Record<string, string[]> =>
+    !!o && typeof o === 'object' && Object.values(o as Record<string, unknown>)
+      .every((value) => Array.isArray(value) && value.every((item) => typeof item === 'string'));
 
   return {
     groups: isStringMap(raw.groups) ? { ...raw.groups } : {},
     models: isStringMap(raw.models) ? { ...raw.models } : {},
     hiddenGroups: isBoolMap(raw.hiddenGroups) ? { ...raw.hiddenGroups } : {},
-    hiddenModels: isBoolMap(raw.hiddenModels) ? { ...raw.hiddenModels } : {}
+    hiddenModels: isBoolMap(raw.hiddenModels) ? { ...raw.hiddenModels } : {},
+    modelOrder: isStringArrayMap(raw.modelOrder)
+      ? Object.fromEntries(Object.entries(raw.modelOrder).map(([key, ids]) => [key, normalizeModelIds(ids)]))
+      : {}
   };
+}
+
+function normalizeModelIds(modelIds: readonly string[]): string[] {
+  return [...new Set(modelIds.map((modelId) => modelId.trim()).filter(Boolean))];
 }
