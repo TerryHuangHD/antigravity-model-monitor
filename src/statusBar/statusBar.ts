@@ -146,6 +146,7 @@ function formatStatusBarText(
   for (const group of groups) {
     for (const member of group.members) {
       const pct = Math.round(member.remainingFraction * 100);
+      const dot = pickDot(pct, thresholds);
       const groupName = names.getGroupName(group.key, group.autoName);
       const memberName = names.getModelName(member.modelId, member.label);
 
@@ -157,7 +158,7 @@ function formatStatusBarText(
       if (memberName === 'Five Hour Limit') shortLabel = '5h';
       else if (memberName === 'Weekly Limit') shortLabel = '7d';
 
-      parts.push(`$(rocket) ${shortGroupName} ${shortLabel}: ${pct}%`);
+      parts.push(`${dot} ${shortGroupName} ${shortLabel}: ${pct}%`);
     }
   }
   return parts.join('  ');

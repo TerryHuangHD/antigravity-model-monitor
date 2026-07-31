@@ -9,7 +9,7 @@ A small VS Code extension for the [Antigravity](https://antigravity.google) AI e
 
 ## Features
 
-- **Status Bar Monitor** — Shows each tracked family's binding limit with the Antigravity indicator (e.g. `$(rocket) Gemini 5h: 84%  $(rocket) Claude/GPT 7d: 97%`); the bar's background reflects the lowest-remaining family.
+- **Status Bar Monitor** — Shows each tracked family's binding limit, color-coded (e.g. `🟢 Gemini 5h: 84%  🟢 Claude/GPT 7d: 97%`); the bar's background reflects the lowest-remaining family.
   - **Color-Coded Alert Thresholds**: green (OK) / yellow (warning, ≤30%) / red (critical, ≤10%).
   - **Dynamic Tooltip**: Hovering over the status item reveals a beautiful markdown table detailing all tracked model groups.
 - **Premium Management Panel** — A beautiful, responsive glassmorphic dashboard where you can:
