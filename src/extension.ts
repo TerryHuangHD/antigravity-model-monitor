@@ -111,7 +111,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.commands.registerCommand('agModelMonitor.resetCustomNames', async () => {
       const choice = await vscode.window.showWarningMessage(
-        'Clear all subscription names, visibility choices, and display order?',
+        'Clear all subscription names, visibility choices, status-bar icon choices, and display order?',
         { modal: true },
         'Reset'
       );

@@ -155,7 +155,8 @@ function formatStatusBarText(
     for (const content of subscription.contents) {
       const percent = Math.round(content.remainingFraction * 100);
       const label = content.customName ? content.name : shortContentName(content.name);
-      parts.push(`${pickDot(percent, thresholds)} ${subscription.name} ${label}: ${percent}%`);
+      const icon = content.statusBarIconHidden ? '' : `${pickDot(percent, thresholds)} `;
+      parts.push(`${icon}${subscription.name} ${label}: ${percent}%`);
     }
   }
   return parts.join('  ');

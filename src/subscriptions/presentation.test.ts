@@ -21,6 +21,7 @@ describe('buildMonitorSubscriptions', () => {
     await names.setSubscriptionHidden('claude-code', true);
     await names.setContentName('codex:weekly', 'Weekly budget');
     await names.setContentHidden('antigravity:gemini:gemini-5h', true);
+    await names.setContentStatusBarIconHidden('codex:weekly', true);
     await names.setSubscriptionOrder(['codex', 'antigravity', 'claude-code']);
 
     const subscriptions = buildMonitorSubscriptions(
@@ -69,7 +70,12 @@ describe('buildMonitorSubscriptions', () => {
 
     expect(subscriptions.map((subscription) => subscription.key)).toEqual(['codex', 'antigravity', 'claude-code']);
     expect(subscriptions[0]).toMatchObject({ name: 'Codex Work', customName: 'Codex Work', hidden: false });
-    expect(subscriptions[0].contents[0]).toMatchObject({ name: 'Weekly budget', customName: 'Weekly budget' });
+    expect(subscriptions[0].contents[0]).toMatchObject({
+      name: 'Weekly budget',
+      customName: 'Weekly budget',
+      hidden: false,
+      statusBarIconHidden: true
+    });
     expect(subscriptions[1].contents.map((content) => content.originalLabel)).toEqual([
       'Gemini 5h · 7d',
       'Gemini 5h · 5h'

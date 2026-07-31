@@ -8,6 +8,7 @@ export interface CustomNamesData {
   subscriptionOrder: string[];
   contentNames: Record<string, string>;
   hiddenContents: Record<string, true>;
+  statusBarIconHiddenContents: Record<string, true>;
   // Explicit visible overrides let the unified UI reveal one Antigravity row
   // even when a legacy group/model visibility flag still hides it.
   visibleContents: Record<string, true>;
@@ -27,6 +28,7 @@ const empty = (): CustomNamesData => ({
   subscriptionOrder: [],
   contentNames: {},
   hiddenContents: {},
+  statusBarIconHiddenContents: {},
   visibleContents: {},
   contentOrder: {},
   groups: {},
@@ -52,6 +54,7 @@ export class CustomNamesStore {
       subscriptionOrder: [...this.data.subscriptionOrder],
       contentNames: { ...this.data.contentNames },
       hiddenContents: { ...this.data.hiddenContents },
+      statusBarIconHiddenContents: { ...this.data.statusBarIconHiddenContents },
       visibleContents: { ...this.data.visibleContents },
       contentOrder: cloneOrderMap(this.data.contentOrder),
       groups: { ...this.data.groups },
@@ -76,6 +79,10 @@ export class CustomNamesStore {
 
   isContentHidden(contentId: string): boolean {
     return this.data.hiddenContents[contentId] === true;
+  }
+
+  isContentStatusBarIconHidden(contentId: string): boolean {
+    return this.data.statusBarIconHiddenContents[contentId] === true;
   }
 
   getContentHiddenOverride(contentId: string): boolean | null {
@@ -135,6 +142,11 @@ export class CustomNamesStore {
       delete this.data.hiddenContents[contentId];
       this.data.visibleContents[contentId] = true;
     }
+    await this.persist();
+  }
+
+  async setContentStatusBarIconHidden(contentId: string, hidden: boolean): Promise<void> {
+    setHidden(this.data.statusBarIconHiddenContents, contentId, hidden);
     await this.persist();
   }
 
@@ -210,6 +222,7 @@ function sanitize(raw: CustomNamesData | undefined): CustomNamesData {
       : [],
     contentNames: isStringMap(raw.contentNames) ? { ...raw.contentNames } : {},
     hiddenContents: isBoolMap(raw.hiddenContents) ? { ...raw.hiddenContents } : {},
+    statusBarIconHiddenContents: isBoolMap(raw.statusBarIconHiddenContents) ? { ...raw.statusBarIconHiddenContents } : {},
     visibleContents: isBoolMap(raw.visibleContents) ? { ...raw.visibleContents } : {},
     contentOrder: isStringArrayMap(raw.contentOrder)
       ? Object.fromEntries(Object.entries(raw.contentOrder).map(([key, ids]) => [key, normalizeIds(ids)]))

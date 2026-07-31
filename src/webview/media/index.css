@@ -318,7 +318,7 @@ input[type='text']:focus {
 
 .content-row {
   display: grid;
-  grid-template-columns: 24px 30px 9px minmax(180px, 1.4fr) minmax(120px, 1fr) 54px minmax(150px, auto);
+  grid-template-columns: 24px minmax(132px, auto) 9px minmax(180px, 1.4fr) minmax(120px, 1fr) 54px minmax(150px, auto);
   align-items: center;
   min-height: 64px;
   padding: 9px 16px 9px 9px;
@@ -339,6 +339,22 @@ input[type='text']:focus {
 
 .drag-handle:hover,
 .drag-handle:focus { color: var(--vscode-foreground); }
+
+.content-toggle-group,
+.content-toggle-control {
+  display: flex;
+  align-items: center;
+}
+
+.content-toggle-group { gap: 12px; }
+.content-toggle-control { gap: 6px; }
+
+.content-toggle-label {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+  white-space: nowrap;
+}
 
 .dot {
   width: 8px;
@@ -417,6 +433,7 @@ input[type='text']:focus {
 .switch input:checked + .slider::before { transform: translateX(16px); }
 .switch-sm input:checked + .slider::before { transform: translateX(13px); }
 .switch input:focus + .slider { box-shadow: 0 0 0 2px var(--vscode-focusBorder); }
+.switch input:disabled + .slider { cursor: not-allowed; opacity: 0.38; }
 
 .inline-error {
   margin: 14px 22px 0;
@@ -467,7 +484,7 @@ input[type='text']:focus {
   .app-header { position: static; }
   .section-heading > p { text-align: left; }
   .subscription-metadata { grid-template-columns: 1fr; }
-  .content-row { grid-template-columns: 22px 28px 8px minmax(120px, 1fr) 50px; }
+  .content-row { grid-template-columns: 22px minmax(132px, auto) 8px minmax(120px, 1fr) 50px; }
   .content-row > .bar,
   .reset-cell { display: none; }
 }

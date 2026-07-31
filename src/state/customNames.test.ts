@@ -42,6 +42,7 @@ describe('CustomNamesStore', () => {
     await store.setContentName('codex:weekly', 'Week');
     await store.setSubscriptionHidden('claude-code', true);
     await store.setContentHidden('codex:weekly', true);
+    await store.setContentStatusBarIconHidden('codex:weekly', true);
     await store.setSubscriptionOrder(['codex', 'antigravity', 'claude-code']);
     await store.setContentOrder('codex', ['codex:weekly']);
     await store.setGroupName('g1', 'Pool');
@@ -55,6 +56,7 @@ describe('CustomNamesStore', () => {
     expect(snap.contentNames).toEqual({});
     expect(snap.hiddenSubscriptions).toEqual({});
     expect(snap.hiddenContents).toEqual({});
+    expect(snap.statusBarIconHiddenContents).toEqual({});
     expect(snap.visibleContents).toEqual({});
     expect(snap.subscriptionOrder).toEqual([]);
     expect(snap.contentOrder).toEqual({});
@@ -86,12 +88,15 @@ describe('CustomNamesStore', () => {
       await first.setContentName('claude-code:weekly', 'Weekly budget');
       await first.setSubscriptionHidden('codex', true);
       await first.setContentHidden('claude-code:five-hour', true);
+      await first.setContentStatusBarIconHidden('claude-code:weekly', true);
 
       const second = new CustomNamesStore(memento);
       expect(second.getSubscriptionName('claude-code', 'Claude Code')).toBe('Claude Personal');
       expect(second.getContentName('claude-code:weekly', 'Weekly Limit')).toBe('Weekly budget');
       expect(second.isSubscriptionHidden('codex')).toBe(true);
       expect(second.isContentHidden('claude-code:five-hour')).toBe(true);
+      expect(second.isContentStatusBarIconHidden('claude-code:weekly')).toBe(true);
+      expect(second.isContentHidden('claude-code:weekly')).toBe(false);
     });
 
     it('persists an explicit visible content override', async () => {

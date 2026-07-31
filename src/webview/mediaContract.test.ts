@@ -15,17 +15,20 @@ describe('webview customization contract', () => {
     expect(script).toContain("metadataField('Description', subscription.description || '—')");
   });
 
-  it('wires names and visibility for subscriptions and content rows', () => {
+  it('wires names, visibility, and status-bar icons for subscriptions and content rows', () => {
     for (const messageType of [
       'renameSubscription',
       'renameContent',
       'setSubscriptionHidden',
-      'setContentHidden'
+      'setContentHidden',
+      'setContentStatusBarIconHidden'
     ]) {
       expect(script).toContain(`type: '${messageType}'`);
     }
     expect(script).toContain("nameInput.className = 'subscription-name-input'");
     expect(script).toContain("nameInput.className = 'content-name-input'");
+    expect(script).toContain("renderToggleControl('Show'");
+    expect(script).toContain("renderToggleControl('Icon'");
   });
 
   it('wires independent drag ordering for subscriptions and their contents', () => {

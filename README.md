@@ -20,6 +20,7 @@ Claude usage is shared across Claude product surfaces, including Claude Code. Co
 - Three independent, consistently structured cards for Antigravity, Claude Code, and Codex.
 - Rename, show/hide, and drag all three subscriptions to control status-bar and tooltip order.
 - Rename, show/hide, and drag every quota content row inside each subscription.
+- Independently hide a quota row's colored status icon without hiding its label, percentage, tooltip details, or alerts.
 - Last-known Claude/Codex values remain visible when a later refresh fails.
 - Existing Antigravity family/model customizations are honored when upgrading to the unified layout.
 - Antigravity account details are intentionally limited to **Account** and **Description**. The previous tier, feature, upgrade, and plan-detail grid is no longer displayed.
@@ -66,7 +67,7 @@ All commands are available from the command palette:
 | `AI Subscription Usage Monitor: Open AI Subscription Usage Monitor` | Opens the dashboard. |
 | `AI Subscription Usage Monitor: Refresh All Subscription Usage` | Refreshes all three sources. |
 | `AI Subscription Usage Monitor: Show Logs` | Opens the extension output channel. |
-| `AI Subscription Usage Monitor: Reset All Display Customizations` | Resets names, visibility, and ordering for all subscriptions and quota rows. |
+| `AI Subscription Usage Monitor: Reset All Display Customizations` | Resets names, visibility, status-bar icon choices, and ordering for all subscriptions and quota rows. |
 
 Antigravity diagnostic commands remain available for troubleshooting its local quota source.
 

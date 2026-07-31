@@ -257,4 +257,56 @@ describe('StatusBarController tooltip', () => {
     controller.dispose();
     names.dispose();
   });
+
+  it('hides only a content status icon without hiding text or disabling alerts', async () => {
+    const item = {
+      text: '',
+      tooltip: '' as string | vscode.MarkdownString,
+      command: undefined,
+      backgroundColor: undefined,
+      show: jest.fn(),
+      dispose: jest.fn()
+    };
+    jest.spyOn(vscode.window, 'createStatusBarItem').mockReturnValue(item as unknown as vscode.StatusBarItem);
+    const notify = jest.spyOn(vscode.window, 'showInformationMessage');
+
+    const names = new CustomNamesStore(new FakeMemento());
+    await names.setSubscriptionHidden('antigravity', true);
+    await names.setSubscriptionHidden('codex', true);
+    await names.setContentStatusBarIconHidden('claude-code:five-hour', true);
+
+    const controller = new StatusBarController(names, {
+      warning: 30,
+      critical: 10,
+      notificationsEnabled: true
+    });
+    controller.applyUpdate({
+      snapshot: null,
+      availableCredits: null,
+      subscriptions: [{
+        key: 'claude-code',
+        name: 'Claude Code',
+        description: 'Claude usage',
+        account: null,
+        source: 'Claude source',
+        limits: [
+          { id: 'five-hour', label: 'Five Hour Limit', remainingFraction: 0.2, resetTime: null, windowMinutes: 300 },
+          { id: 'weekly', label: 'Weekly Limit', remainingFraction: 0.7, resetTime: null, windowMinutes: 10080 }
+        ],
+        error: null,
+        lastUpdatedAt: null
+      }],
+      error: null,
+      lastUpdatedAt: new Date(),
+      isLoading: false
+    });
+
+    expect(item.text).toContain('Claude Code 5h: 20%');
+    expect(item.text).not.toContain('🟡 Claude Code 5h: 20%');
+    expect(item.text).toContain('🟢 Claude Code 7d: 70%');
+    expect(notify).toHaveBeenCalledWith('Claude Code 5h is low at 20% remaining.');
+
+    controller.dispose();
+    names.dispose();
+  });
 });

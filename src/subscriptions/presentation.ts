@@ -15,6 +15,7 @@ export interface MonitorContent {
   customName: string | null;
   name: string;
   hidden: boolean;
+  statusBarIconHidden: boolean;
   remainingFraction: number;
   resetTime: Date | null;
   windowMinutes: number | null;
@@ -95,6 +96,7 @@ function buildAntigravitySubscription(
         hidden: hiddenOverride ?? (
           names.isGroupHidden(group.key) || names.isModelHidden(member.modelId)
         ),
+        statusBarIconHidden: names.isContentStatusBarIconHidden(id),
         remainingFraction: member.remainingFraction,
         resetTime: member.resetTime,
         windowMinutes: inferWindowMinutes(member.label)
@@ -130,6 +132,7 @@ function buildExternalSubscription(
       customName,
       name: names.getContentName(id, originalLabel),
       hidden: names.isContentHidden(id),
+      statusBarIconHidden: names.isContentStatusBarIconHidden(id),
       remainingFraction: limit.remainingFraction,
       resetTime: limit.resetTime,
       windowMinutes: limit.windowMinutes

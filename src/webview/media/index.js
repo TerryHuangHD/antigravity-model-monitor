@@ -15,7 +15,7 @@
 
   refreshBtn.addEventListener('click', () => vscode.postMessage({ type: 'refresh' }));
   resetAllBtn.addEventListener('click', () => {
-    if (window.confirm('Clear all subscription names, visibility choices, and display order?')) {
+    if (window.confirm('Clear all subscription names, visibility choices, status-bar icon choices, and display order?')) {
       vscode.postMessage({ type: 'resetAll' });
     }
   });
@@ -61,6 +61,7 @@
     controls.appendChild(renderSwitch({
       checked: !subscription.hidden,
       title: subscription.hidden ? 'Show this subscription' : 'Hide this subscription from the status bar',
+      ariaLabel: `Show ${subscription.customName || subscription.originalName} in the status bar`,
       onChange: (checked) => vscode.postMessage({
         type: 'setSubscriptionHidden',
         subscriptionKey: subscription.key,
@@ -114,7 +115,7 @@
     contentTitle.textContent = 'Quota contents';
     contentHeader.appendChild(contentTitle);
     const hint = document.createElement('span');
-    hint.textContent = 'Drag to set status-bar order';
+    hint.textContent = 'Show controls the item · Icon controls its colored dot';
     contentHeader.appendChild(hint);
     card.appendChild(contentHeader);
 
@@ -158,16 +159,36 @@
       'content-drag-handle',
       `Reorder ${content.customName || content.originalLabel}`
     ));
-    row.appendChild(renderSwitch({
+
+    const displayName = content.customName || content.originalLabel;
+    const toggleGroup = document.createElement('div');
+    toggleGroup.className = 'content-toggle-group';
+    toggleGroup.appendChild(renderToggleControl('Show', {
       checked: !content.hidden,
       small: true,
-      title: content.hidden ? 'Show this quota content' : 'Hide this quota content from the status bar',
+      title: content.hidden ? 'Show this quota content in the status bar' : 'Hide this quota content from the status bar',
+      ariaLabel: `Show ${displayName} in the status bar`,
       onChange: (checked) => vscode.postMessage({
         type: 'setContentHidden',
         contentId: content.id,
         hidden: !checked
       })
     }));
+    toggleGroup.appendChild(renderToggleControl('Icon', {
+      checked: !content.statusBarIconHidden,
+      disabled: content.hidden,
+      small: true,
+      title: content.hidden
+        ? 'Show this item before changing its icon'
+        : content.statusBarIconHidden ? 'Show the colored status icon' : 'Hide the colored status icon',
+      ariaLabel: `Show the colored status icon for ${displayName}`,
+      onChange: (checked) => vscode.postMessage({
+        type: 'setContentStatusBarIconHidden',
+        contentId: content.id,
+        hidden: !checked
+      })
+    }));
+    row.appendChild(toggleGroup);
 
     const dot = document.createElement('span');
     dot.className = `dot${pctClass(content.remainingPercent)}`;
@@ -316,14 +337,27 @@
     return handle;
   }
 
-  function renderSwitch({ checked, onChange, title, small }) {
+  function renderToggleControl(text, options) {
+    const control = document.createElement('div');
+    control.className = 'content-toggle-control';
+    const label = document.createElement('span');
+    label.className = 'content-toggle-label';
+    label.textContent = text;
+    control.appendChild(label);
+    control.appendChild(renderSwitch(options));
+    return control;
+  }
+
+  function renderSwitch({ checked, onChange, title, ariaLabel, small, disabled }) {
     const label = document.createElement('label');
     label.className = `switch${small ? ' switch-sm' : ''}`;
     if (title) label.title = title;
     const input = document.createElement('input');
     input.type = 'checkbox';
     input.checked = !!checked;
+    input.disabled = !!disabled;
     input.setAttribute('role', 'switch');
+    if (ariaLabel) input.setAttribute('aria-label', ariaLabel);
     input.addEventListener('change', () => onChange(input.checked));
     const slider = document.createElement('span');
     slider.className = 'slider';

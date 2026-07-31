@@ -17,6 +17,7 @@ interface InboundMessage {
     | 'renameContent'
     | 'setSubscriptionHidden'
     | 'setContentHidden'
+    | 'setContentStatusBarIconHidden'
     | 'setSubscriptionOrder'
     | 'setContentOrder'
     | 'resetAll'
@@ -41,6 +42,7 @@ interface ContentView {
   originalLabel: string;
   customName: string | null;
   hidden: boolean;
+  statusBarIconHidden: boolean;
   remainingPercent: number;
   resetTime: string | null;
 }
@@ -125,6 +127,9 @@ export class ManagementPanel {
         break;
       case 'setContentHidden':
         if (msg.contentId != null) await this.names.setContentHidden(msg.contentId, !!msg.hidden);
+        break;
+      case 'setContentStatusBarIconHidden':
+        if (msg.contentId != null) await this.names.setContentStatusBarIconHidden(msg.contentId, !!msg.hidden);
         break;
       case 'setSubscriptionOrder':
         if (Array.isArray(msg.subscriptionKeys)) {
@@ -222,6 +227,7 @@ function mapSubscription(subscription: MonitorSubscription): SubscriptionView {
       originalLabel: content.originalLabel,
       customName: content.customName,
       hidden: content.hidden,
+      statusBarIconHidden: content.statusBarIconHidden,
       remainingPercent: Math.round(content.remainingFraction * 100),
       resetTime: content.resetTime?.toISOString() ?? null
     }))
