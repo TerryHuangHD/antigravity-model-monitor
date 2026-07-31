@@ -55,6 +55,7 @@ describe('CustomNamesStore', () => {
     expect(snap.contentNames).toEqual({});
     expect(snap.hiddenSubscriptions).toEqual({});
     expect(snap.hiddenContents).toEqual({});
+    expect(snap.visibleContents).toEqual({});
     expect(snap.subscriptionOrder).toEqual([]);
     expect(snap.contentOrder).toEqual({});
     expect(snap.groups).toEqual({});
@@ -91,6 +92,22 @@ describe('CustomNamesStore', () => {
       expect(second.getContentName('claude-code:weekly', 'Weekly Limit')).toBe('Weekly budget');
       expect(second.isSubscriptionHidden('codex')).toBe(true);
       expect(second.isContentHidden('claude-code:five-hour')).toBe(true);
+    });
+
+    it('persists an explicit visible content override', async () => {
+      const memento = new FakeMemento();
+      const first = new CustomNamesStore(memento);
+      await first.setContentHidden('antigravity:gemini:weekly', false);
+
+      const second = new CustomNamesStore(memento);
+      expect(second.getContentHiddenOverride('antigravity:gemini:weekly')).toBe(false);
+      expect(second.snapshot().visibleContents).toEqual({
+        'antigravity:gemini:weekly': true
+      });
+
+      await second.setContentHidden('antigravity:gemini:weekly', true);
+      expect(second.getContentHiddenOverride('antigravity:gemini:weekly')).toBe(true);
+      expect(second.snapshot().visibleContents).toEqual({});
     });
 
     it('orders subscriptions and contents while appending new items', async () => {

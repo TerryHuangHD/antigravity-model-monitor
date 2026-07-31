@@ -8,6 +8,9 @@ export interface CustomNamesData {
   subscriptionOrder: string[];
   contentNames: Record<string, string>;
   hiddenContents: Record<string, true>;
+  // Explicit visible overrides let the unified UI reveal one Antigravity row
+  // even when a legacy group/model visibility flag still hides it.
+  visibleContents: Record<string, true>;
   contentOrder: Record<string, string[]>;
   // Legacy Antigravity customization fields. They remain readable so existing
   // installations keep their names, visibility, and per-family order.
@@ -24,6 +27,7 @@ const empty = (): CustomNamesData => ({
   subscriptionOrder: [],
   contentNames: {},
   hiddenContents: {},
+  visibleContents: {},
   contentOrder: {},
   groups: {},
   models: {},
@@ -48,6 +52,7 @@ export class CustomNamesStore {
       subscriptionOrder: [...this.data.subscriptionOrder],
       contentNames: { ...this.data.contentNames },
       hiddenContents: { ...this.data.hiddenContents },
+      visibleContents: { ...this.data.visibleContents },
       contentOrder: cloneOrderMap(this.data.contentOrder),
       groups: { ...this.data.groups },
       models: { ...this.data.models },
@@ -71,6 +76,12 @@ export class CustomNamesStore {
 
   isContentHidden(contentId: string): boolean {
     return this.data.hiddenContents[contentId] === true;
+  }
+
+  getContentHiddenOverride(contentId: string): boolean | null {
+    if (this.data.hiddenContents[contentId] === true) return true;
+    if (this.data.visibleContents[contentId] === true) return false;
+    return null;
   }
 
   orderSubscriptions<T extends { key: string }>(subscriptions: readonly T[]): T[] {
@@ -117,7 +128,13 @@ export class CustomNamesStore {
   }
 
   async setContentHidden(contentId: string, hidden: boolean): Promise<void> {
-    setHidden(this.data.hiddenContents, contentId, hidden);
+    if (hidden) {
+      this.data.hiddenContents[contentId] = true;
+      delete this.data.visibleContents[contentId];
+    } else {
+      delete this.data.hiddenContents[contentId];
+      this.data.visibleContents[contentId] = true;
+    }
     await this.persist();
   }
 
@@ -193,6 +210,7 @@ function sanitize(raw: CustomNamesData | undefined): CustomNamesData {
       : [],
     contentNames: isStringMap(raw.contentNames) ? { ...raw.contentNames } : {},
     hiddenContents: isBoolMap(raw.hiddenContents) ? { ...raw.hiddenContents } : {},
+    visibleContents: isBoolMap(raw.visibleContents) ? { ...raw.visibleContents } : {},
     contentOrder: isStringArrayMap(raw.contentOrder)
       ? Object.fromEntries(Object.entries(raw.contentOrder).map(([key, ids]) => [key, normalizeIds(ids)]))
       : {},

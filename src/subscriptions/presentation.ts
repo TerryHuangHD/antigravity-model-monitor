@@ -80,14 +80,15 @@ function buildAntigravitySubscription(
       const legacyMemberName = names.getModelName(member.modelId, member.label);
       const originalLabel = `${legacyGroupName} · ${legacyMemberName}`;
       const customName = customizations.contentNames[id] ?? null;
+      const hiddenOverride = names.getContentHiddenOverride(id);
       contents.push({
         id,
         originalLabel,
         customName,
         name: names.getContentName(id, originalLabel),
-        hidden: names.isContentHidden(id)
-          || names.isGroupHidden(group.key)
-          || names.isModelHidden(member.modelId),
+        hidden: hiddenOverride ?? (
+          names.isGroupHidden(group.key) || names.isModelHidden(member.modelId)
+        ),
         remainingFraction: member.remainingFraction,
         resetTime: member.resetTime,
         windowMinutes: inferWindowMinutes(member.label)

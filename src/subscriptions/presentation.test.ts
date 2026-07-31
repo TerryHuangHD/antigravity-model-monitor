@@ -112,4 +112,33 @@ describe('buildMonitorSubscriptions', () => {
     expect(antigravity?.contents[0].hidden).toBe(true);
     names.dispose();
   });
+
+  it('lets a unified content switch override legacy Antigravity visibility', async () => {
+    const names = new CustomNamesStore(new FakeMemento());
+    await names.setGroupHidden('gemini', true);
+    await names.setContentHidden('antigravity:gemini:weekly', false);
+
+    const subscriptions = buildMonitorSubscriptions(
+      {
+        totalModelCount: 2,
+        groups: [{
+          key: 'gemini',
+          autoName: 'Gemini Models',
+          minRemainingFraction: 0.5,
+          members: [
+            { modelId: 'weekly', label: 'Weekly Limit', remainingFraction: 0.5, resetTime: null },
+            { modelId: 'five-hour', label: 'Five Hour Limit', remainingFraction: 0.8, resetTime: null }
+          ]
+        }]
+      },
+      [],
+      names,
+      { account: null, description: null, error: null, lastUpdatedAt: null }
+    );
+
+    const antigravity = subscriptions.find((subscription) => subscription.key === 'antigravity');
+    expect(antigravity?.contents.find((content) => content.id.endsWith(':weekly'))?.hidden).toBe(false);
+    expect(antigravity?.contents.find((content) => content.id.endsWith(':five-hour'))?.hidden).toBe(true);
+    names.dispose();
+  });
 });
